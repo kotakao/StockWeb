@@ -1,0 +1,61 @@
+@page "/coverage"
+@using StockWeb.Models
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Nav
+
+<PageTitle>資料覆蓋範圍</PageTitle>
+
+<h1>資料覆蓋範圍</h1>
+<p>各資料表的起訖日期與資料日數，用於檢視資料健康度。</p>
+
+@if (_error is not null)
+{
+    <p class="error">無法載入覆蓋資訊：@_error</p>
+}
+else if (_rows is null)
+{
+    <p>載入中…</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>資料表</th>
+                <th>最早日期</th>
+                <th>最新日期</th>
+                <th>資料日數</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _rows)
+            {
+                <tr>
+                    <td>@row.TableName</td>
+                    <td>@(row.MinDate ?? "—")</td>
+                    <td>@(row.MaxDate ?? "—")</td>
+                    <td>@row.DistinctDays</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<CoverageRow>? _rows;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(Nav.BaseUri);
+            _rows = await client.GetFromJsonAsync<List<CoverageRow>>("api/coverage");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}
