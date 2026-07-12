@@ -14,8 +14,15 @@ public record VolumeTemperatureResult(double? Today, double? Average, double? Mu
 /// <summary>法人流向單日點：當日淨額（張）與累積（張，原點為窗最舊日）。</summary>
 public record FlowPoint(string Date, long Net, long Cumulative);
 
-/// <summary>法人流向結果：近 recent 日序列、趨勢、樣本天數。</summary>
-public record FlowResult(IReadOnlyList<FlowPoint> Series, string? Trend, int SampleDays);
+/// <summary>
+/// 法人流向結果：Series/Trend/SampleDays 對齊 Python foreign_flow_trend（近 recent 日摘要）；
+/// Window 為同一累積曲線的完整窗序列（近 days 日全部點），供圖表畫滿曲線用。
+/// </summary>
+public record FlowResult(
+    IReadOnlyList<FlowPoint> Series,
+    string? Trend,
+    int SampleDays,
+    IReadOnlyList<FlowPoint> Window);
 
 /// <summary>/api/market/breadth 回應：A/D Line、量能溫度、三大法人近 N 日累積。</summary>
 public record BreadthResponse(

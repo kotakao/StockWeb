@@ -117,4 +117,18 @@ public class MarketBreadthCalculatorTests
         Assert.Equal(0, data.SampleDays);
         Assert.Null(data.Trend);
     }
+
+    [Fact]
+    public void ForeignFlowTrend_Window_ReturnsFullWindow_WhileSeriesStaysRecent()
+    {
+        // 12 日資料、窗上限 20：完整窗序列應含全部 12 點，Series 仍為近 5 日摘要。
+        var asc = Enumerable.Range(1, 12).Select(i => Md(i, foreign: 1_000_000));
+        var data = MarketBreadthCalculator.ForeignFlowTrend(Desc(asc));
+
+        Assert.Equal(5, data.Series.Count);          // 摘要維持近 5 日（對齊 Python）
+        Assert.Equal(12, data.Window.Count);         // 完整窗畫滿 12 點
+        Assert.Equal(12, data.SampleDays);
+        Assert.Equal(1000, data.Window[0].Cumulative);   // 第 1 日累積 1,000,000 股 → 1000 張
+        Assert.Equal(12000, data.Window[^1].Cumulative); // 第 12 日累積 → 12000 張
+    }
 }

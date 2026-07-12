@@ -184,7 +184,8 @@
         {
             if (flow.SampleDays == 0)
                 return;
-            var points = flow.Series.Select(p => new ChartPoint(p.Date, p.Cumulative)).ToList();
+            // 畫滿完整窗序列（近 20 日全部點），而非僅近 5 日摘要。
+            var points = flow.Window.Select(p => new ChartPoint(p.Date, p.Cumulative)).ToList();
             acc.Add(new ChartSeries("line", points, color, "right", title));
         }
     }

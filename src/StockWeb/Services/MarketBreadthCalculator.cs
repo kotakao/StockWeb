@@ -103,6 +103,7 @@ public static class MarketBreadthCalculator
         if (recentSeries.Count >= 2)
             trend = Trend(recentSeries[^1].Cumulative - recentSeries[0].Cumulative);
 
-        return new FlowResult(recentSeries, trend, series.Count);
+        // series 即完整窗序列；recentSeries 為對齊 Python 的近 recent 日摘要。
+        return new FlowResult(recentSeries, trend, series.Count, series);
     }
 }
