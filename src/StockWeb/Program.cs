@@ -16,6 +16,7 @@ var dbPath = builder.Configuration["DbPath"]
     ?? throw new InvalidOperationException("appsettings.json 缺少 DbPath 設定。");
 builder.Services.AddSingleton<IDbConnectionFactory>(new SqliteConnectionFactory(dbPath));
 builder.Services.AddScoped<ICoverageRepository, CoverageRepository>();
+builder.Services.AddScoped<IMarketRepository, MarketRepository>();
 
 var app = builder.Build();
 
@@ -29,6 +30,7 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.MapCoverageEndpoints();
+app.MapMarketEndpoints();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

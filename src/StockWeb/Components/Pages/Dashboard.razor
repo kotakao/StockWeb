@@ -1,0 +1,206 @@
+@page "/"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Nav
+
+<PageTitle>市場儀表板</PageTitle>
+
+<h1>市場儀表板</h1>
+<p>近 @Days 個交易日的盤後大盤概況。每張卡各自獨立，資料不足時僅該卡顯示原因。</p>
+
+<div class="dashboard-grid">
+
+    @* 卡一：加權指數 + 成交金額雙軸 *@
+    <section class="card">
+        <h2>指數與成交金額</h2>
+        @if (VolumeCaption is not null)
+        {
+            <p class="card-caption">@VolumeCaption</p>
+        }
+        @if (_dailyError is not null)
+        {
+            <p class="card-reason">無法載入：@_dailyError</p>
+        }
+        else if (_daily is null)
+        {
+            <p class="card-reason">載入中…</p>
+        }
+        else if (BuildIndexTurnover() is { } spec)
+        {
+            <LightweightChart Spec="spec" />
+        }
+        else
+        {
+            <p class="card-reason">尚無指數或成交金額資料。</p>
+        }
+    </section>
+
+    @* 卡二：漲跌家數與 A/D Line *@
+    <section class="card">
+        <h2>漲跌家數與 A/D Line</h2>
+        @if (_breadthError is not null)
+        {
+            <p class="card-reason">無法載入：@_breadthError</p>
+        }
+        else if (_breadth is null)
+        {
+            <p class="card-reason">載入中…</p>
+        }
+        else if (_breadth.AdLine.SampleDays > 0)
+        {
+            <p class="card-caption">趨勢：@(_breadth.AdLine.Trend ?? "資料不足") · 樣本 @_breadth.AdLine.SampleDays 日</p>
+            <LightweightChart Spec="BuildAdLine(_breadth.AdLine)" />
+        }
+        else
+        {
+            <p class="card-reason">尚無漲跌家數資料。</p>
+        }
+    </section>
+
+    @* 卡三：三大法人近 20 日累積 *@
+    <section class="card">
+        <h2>三大法人近 20 日累積（張）</h2>
+        @if (_breadthError is not null)
+        {
+            <p class="card-reason">無法載入：@_breadthError</p>
+        }
+        else if (_breadth is null)
+        {
+            <p class="card-reason">載入中…</p>
+        }
+        else if (BuildInstitutional(_breadth) is { } spec)
+        {
+            <p class="card-caption">外資 <span class="dot" style="background:#d32f2f"></span> · 投信 <span class="dot" style="background:#2e7d32"></span> · 自營 <span class="dot" style="background:#f9a825"></span></p>
+            <LightweightChart Spec="spec" />
+        }
+        else
+        {
+            <p class="card-reason">尚無三大法人資料。</p>
+        }
+    </section>
+
+    @* 卡四：融資餘額趨勢 *@
+    <section class="card">
+        <h2>融資餘額趨勢</h2>
+        @if (_dailyError is not null)
+        {
+            <p class="card-reason">無法載入：@_dailyError</p>
+        }
+        else if (_daily is null)
+        {
+            <p class="card-reason">載入中…</p>
+        }
+        else if (BuildMargin() is { } spec)
+        {
+            <LightweightChart Spec="spec" />
+        }
+        else
+        {
+            <p class="card-reason">尚無融資餘額資料。</p>
+        }
+    </section>
+
+</div>
+
+@code {
+    private const int Days = 60;
+
+    private List<MarketDailyRow>? _daily;      // 日期由舊到新
+    private BreadthResponse? _breadth;
+    private string? _dailyError;
+    private string? _breadthError;
+
+    // 卡一標題下的量能溫度說明（來自 breadth 計算）。
+    private string? VolumeCaption =>
+        _breadth?.VolumeTemperature is { Multiple: { } m, SampleDays: > 0 } vt
+            ? $"量能溫度：{m:0.00} 倍（當日 vs 近 {vt.SampleDays} 日均量）"
+            : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var client = HttpClientFactory.CreateClient();
+        client.BaseAddress = new Uri(Nav.BaseUri);
+
+        // 兩個資料來源各自容錯：其一失敗不影響另一組卡片。
+        try
+        {
+            _daily = await client.GetFromJsonAsync<List<MarketDailyRow>>($"api/market/daily?days={Days}");
+        }
+        catch (Exception ex)
+        {
+            _dailyError = ex.Message;
+        }
+
+        try
+        {
+            _breadth = await client.GetFromJsonAsync<BreadthResponse>($"api/market/breadth?days={Days}");
+        }
+        catch (Exception ex)
+        {
+            _breadthError = ex.Message;
+        }
+    }
+
+    private ChartSpec? BuildIndexTurnover()
+    {
+        var index = Points(_daily, r => r.IndexClose);
+        var turnover = _daily is null ? new() : _daily
+            .Where(r => r.Turnover is not null)
+            .Select(r => new ChartPoint(r.Date, Math.Round(r.Turnover!.Value / 1e8, 2))) // 元 → 億元
+            .ToList();
+
+        if (index.Count == 0 && turnover.Count == 0)
+            return null;
+
+        var series = new List<ChartSeries>();
+        if (index.Count > 0)
+            series.Add(new ChartSeries("line", index, "#d32f2f", "right", "加權指數"));
+        if (turnover.Count > 0)
+            series.Add(new ChartSeries("histogram", turnover, "#b0bec5", "left", "成交金額(億)"));
+
+        return new ChartSpec(series, LeftScale: true, Height: 280);
+    }
+
+    private static ChartSpec BuildAdLine(AdLineResult ad)
+    {
+        var net = ad.Series.Select(p => new ChartPoint(p.Date, p.Net)).ToList();
+        var cumulative = ad.Series.Select(p => new ChartPoint(p.Date, p.Cumulative)).ToList();
+        return new ChartSpec(new List<ChartSeries>
+        {
+            new("histogram", net, "#90a4ae", "left", "淨額(家)"),
+            new("line", cumulative, "#1565c0", "right", "A/D Line"),
+        }, LeftScale: true, Height: 260);
+    }
+
+    private static ChartSpec? BuildInstitutional(BreadthResponse b)
+    {
+        var series = new List<ChartSeries>();
+        AddFlow(series, b.ForeignFlow, "#d32f2f", "外資");
+        AddFlow(series, b.TrustFlow, "#2e7d32", "投信");
+        AddFlow(series, b.DealerFlow, "#f9a825", "自營商");
+        return series.Count > 0 ? new ChartSpec(series, Height: 260) : null;
+
+        static void AddFlow(List<ChartSeries> acc, FlowResult flow, string color, string title)
+        {
+            if (flow.SampleDays == 0)
+                return;
+            var points = flow.Series.Select(p => new ChartPoint(p.Date, p.Cumulative)).ToList();
+            acc.Add(new ChartSeries("line", points, color, "right", title));
+        }
+    }
+
+    private ChartSpec? BuildMargin()
+    {
+        var margin = Points(_daily, r => r.MarginBalance);
+        return margin.Count > 0
+            ? new ChartSpec(new List<ChartSeries> { new("area", margin, "#6a1b9a", "right", "融資餘額") }, Height: 260)
+            : null;
+    }
+
+    private static List<ChartPoint> Points(List<MarketDailyRow>? rows, Func<MarketDailyRow, double?> selector)
+        => rows is null
+            ? new()
+            : rows.Where(r => selector(r) is not null)
+                  .Select(r => new ChartPoint(r.Date, selector(r)!.Value))
+                  .ToList();
+}

@@ -1,0 +1,33 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* Lightweight Charts 的可重用包裝：接 ChartSpec，交由 charts.js 繪製。供 Dashboard 與後續個股頁共用。 *@
+<div @ref="_container" class="lw-chart"></div>
+
+@code {
+    [Parameter, EditorRequired] public ChartSpec Spec { get; set; } = default!;
+
+    private ElementReference _container;
+    private IJSObjectReference? _module;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/charts.js");
+        await _module.InvokeVoidAsync("render", _container, Spec);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+            return;
+        try
+        {
+            await _module.InvokeVoidAsync("dispose", _container);
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // 電路已中斷（例如關閉分頁），無需再清理。
+        }
+    }
+}
