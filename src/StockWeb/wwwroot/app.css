@@ -139,3 +139,125 @@ h1:focus {
         grid-template-columns: 1fr;
     }
 }
+
+/* 漲跌色（台灣慣例：紅漲綠跌） */
+.up { color: #d32f2f; }
+.down { color: #2e7d32; }
+
+/* 表格內的文字按鈕（加自選 / 移除） */
+.link-btn {
+    background: none;
+    border: none;
+    color: #1565c0;
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+}
+
+.link-btn:disabled {
+    color: #aaa;
+    cursor: default;
+}
+
+.watchlist-msg {
+    color: #555;
+    font-size: 0.85rem;
+}
+
+/* 自選股 */
+.watchlist-add {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.watchlist-add input {
+    padding: 0.3rem;
+}
+
+.watchlist-table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.watchlist-table th,
+.watchlist-table td {
+    border-bottom: 1px solid #eee;
+    padding: 0.3rem 0.6rem;
+    text-align: right;
+}
+
+.watchlist-table th:first-child,
+.watchlist-table td:first-child,
+.watchlist-table th:nth-child(2),
+.watchlist-table td:nth-child(2),
+.watchlist-table th:last-child,
+.watchlist-table td:last-child {
+    text-align: left;
+}
+
+/* 除權息行事曆 */
+.cal-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.cal-toolbar button {
+    padding: 0.3rem 0.7rem;
+    cursor: pointer;
+}
+
+.cal-month {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+    background: #e0e0e0;
+    border: 1px solid #e0e0e0;
+}
+
+.cal-head {
+    background: #f5f5f5;
+    text-align: center;
+    padding: 0.35rem 0;
+    font-size: 0.85rem;
+    color: #555;
+}
+
+.cal-cell {
+    background: #fff;
+    min-height: 5.5rem;
+    padding: 0.25rem;
+    font-size: 0.8rem;
+}
+
+.cal-blank {
+    background: #fafafa;
+}
+
+.cal-day {
+    color: #888;
+    margin-bottom: 0.15rem;
+}
+
+.cal-event {
+    background: #eceff1;
+    border-radius: 3px;
+    padding: 0.05rem 0.25rem;
+    margin-bottom: 0.1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cal-event.in-watch {
+    background: #ffe082;
+    font-weight: 600;
+}

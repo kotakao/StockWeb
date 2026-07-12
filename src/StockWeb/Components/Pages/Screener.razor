@@ -89,6 +89,7 @@
                         {
                             <th>量能倍數</th>
                         }
+                        <th>自選</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -127,7 +128,16 @@
                             {
                                 <td>@Fmt(row.VolumeMultiple)</td>
                             }
-                            @* 「加自選」鈕待 W4 自選清單完成後再開啟，此處先隱藏。 *@
+                            <td>
+                                @if (_watchMsg.TryGetValue(row.Code, out var msg))
+                                {
+                                    <span class="watchlist-msg">@msg</span>
+                                }
+                                else
+                                {
+                                    <button class="link-btn" @onclick="() => AddWatchAsync(row.Code)">加自選</button>
+                                }
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -150,8 +160,26 @@
     private ScreenerCriteria _shown = new();   // 上次送出的條件，決定結果表要顯示哪些觸發值欄。
     private string? _error;
     private bool _loading;
+    private readonly Dictionary<string, string> _watchMsg = new();   // 每列「加自選」的結果訊息（成功後取代按鈕）。
 
     private static string Fmt(double? value) => value is { } v ? v.ToString("0.##") : "—";
+
+    private async Task AddWatchAsync(string code)
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(Nav.BaseUri);
+            var response = await client.PostAsJsonAsync("api/watchlist", new WatchlistRequest { Code = code });
+            _watchMsg[code] = response.IsSuccessStatusCode
+                ? "✓ 已加入"
+                : (await response.Content.ReadFromJsonAsync<ApiError>())?.Error ?? $"HTTP {(int)response.StatusCode}";
+        }
+        catch (Exception ex)
+        {
+            _watchMsg[code] = ex.Message;
+        }
+    }
 
     private async Task RunAsync()
     {

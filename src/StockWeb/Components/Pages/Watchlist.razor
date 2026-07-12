@@ -1,0 +1,153 @@
+@page "/watchlist"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Nav
+
+<PageTitle>自選股</PageTitle>
+
+<h1>自選股</h1>
+<p>與 Bot /watch 共用清單，上限 20 檔。顯示最新收盤、漲跌%、近 5 日三大法人淨額（張）與融資餘額變化。</p>
+
+<div class="watchlist-add">
+    <input placeholder="輸入股票代號（如 2330）" @bind="_newCode" @bind:event="oninput"
+           @onkeydown="OnKeyDown" maxlength="6" />
+    <button @onclick="AddAsync" disabled="@_busy">加入</button>
+    @if (_addMessage is not null)
+    {
+        <span class="watchlist-msg">@_addMessage</span>
+    }
+</div>
+
+@if (_error is not null)
+{
+    <p class="error">無法載入自選股：@_error</p>
+}
+else if (_rows is null)
+{
+    <p class="card-reason">載入中…</p>
+}
+else if (_rows.Count == 0)
+{
+    <p class="card-reason">尚無自選股，於上方輸入代號加入。</p>
+}
+else
+{
+    <table class="watchlist-table">
+        <thead>
+            <tr>
+                <th>代號</th>
+                <th>名稱</th>
+                <th>收盤</th>
+                <th>漲跌%</th>
+                <th>近5日法人淨額(張)</th>
+                <th>融資餘額變化</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _rows)
+            {
+                <tr>
+                    <td><a href="stock/@row.Code">@row.Code</a></td>
+                    <td>@row.Name</td>
+                    <td>@Fmt(row.Close)</td>
+                    <td class="@SignClass(row.ChangePct)">@Fmt(row.ChangePct)</td>
+                    <td class="@SignClass(row.InstitutionalNet5)">@Lots(row.InstitutionalNet5)</td>
+                    <td class="@SignClass(row.MarginChange)">@FmtInt(row.MarginChange)</td>
+                    <td><button class="link-btn" @onclick="() => RemoveAsync(row.Code)" disabled="@_busy">移除</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<WatchlistRow>? _rows;
+    private string? _error;
+    private string _newCode = "";
+    private string? _addMessage;
+    private bool _busy;
+
+    private static string Fmt(double? v) => v is { } x ? x.ToString("0.##") : "—";
+    private static string FmtInt(double? v) => v is { } x ? x.ToString("#,##0") : "—";
+    private static string Lots(double? shares) => shares is { } s ? (s / 1000).ToString("#,##0") : "—";
+    private static string SignClass(double? v) => v is { } x && x != 0 ? (x > 0 ? "up" : "down") : "";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private HttpClient Client()
+    {
+        var client = HttpClientFactory.CreateClient();
+        client.BaseAddress = new Uri(Nav.BaseUri);
+        return client;
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _rows = await Client().GetFromJsonAsync<List<WatchlistRow>>("api/watchlist");
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await AddAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        var code = _newCode.Trim();
+        if (code.Length == 0)
+            return;
+
+        _busy = true;
+        _addMessage = null;
+        try
+        {
+            var response = await Client().PostAsJsonAsync("api/watchlist", new WatchlistRequest { Code = code });
+            if (response.IsSuccessStatusCode)
+            {
+                _newCode = "";
+                await LoadAsync();
+            }
+            else
+            {
+                var apiError = await response.Content.ReadFromJsonAsync<ApiError>();
+                _addMessage = apiError?.Error ?? $"HTTP {(int)response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _addMessage = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveAsync(string code)
+    {
+        _busy = true;
+        try
+        {
+            await Client().DeleteAsync($"api/watchlist/{code}");
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

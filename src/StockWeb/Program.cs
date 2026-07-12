@@ -18,6 +18,8 @@ builder.Services.AddSingleton<IDbConnectionFactory>(new SqliteConnectionFactory(
 builder.Services.AddScoped<ICoverageRepository, CoverageRepository>();
 builder.Services.AddScoped<IMarketRepository, MarketRepository>();
 builder.Services.AddScoped<IScreenerRepository, ScreenerRepository>();
+builder.Services.AddScoped<IWatchlistRepository, WatchlistRepository>();
+builder.Services.AddScoped<ICalendarRepository, CalendarRepository>();
 
 var app = builder.Build();
 
@@ -33,6 +35,8 @@ app.UseAntiforgery();
 app.MapCoverageEndpoints();
 app.MapMarketEndpoints();
 app.MapScreenerEndpoints();
+app.MapWatchlistEndpoints();
+app.MapCalendarEndpoints();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

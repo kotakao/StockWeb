@@ -1,0 +1,104 @@
+@page "/calendar"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Nav
+
+<PageTitle>除權息行事曆</PageTitle>
+
+<h1>除權息行事曆</h1>
+<p>月曆格線標示當月除權息事件，<span class="cal-event in-watch">自選股</span>以高亮顯示。</p>
+
+<div class="cal-toolbar">
+    <button @onclick="() => ShiftMonth(-1)">← 上個月</button>
+    <span class="cal-month">@_month.ToString("yyyy 年 M 月")</span>
+    <button @onclick="() => ShiftMonth(1)">下個月 →</button>
+</div>
+
+@if (_error is not null)
+{
+    <p class="error">無法載入行事曆：@_error</p>
+}
+else if (_byDay is null)
+{
+    <p class="card-reason">載入中…</p>
+}
+else
+{
+    <div class="cal-grid">
+        @foreach (var name in WeekdayNames)
+        {
+            <div class="cal-head">@name</div>
+        }
+        @for (var i = 0; i < LeadingBlanks; i++)
+        {
+            <div class="cal-cell cal-blank"></div>
+        }
+        @for (var day = 1; day <= DaysInMonth; day++)
+        {
+            var events = _byDay[day];
+            <div class="cal-cell">
+                <div class="cal-day">@day</div>
+                @foreach (var ev in events)
+                {
+                    <div class="cal-event @(ev.InWatchlist ? "in-watch" : "")" title="@Tooltip(ev)">
+                        @ev.Code @ev.Name
+                    </div>
+                }
+            </div>
+        }
+    </div>
+    @if (_events!.Count == 0)
+    {
+        <p class="card-reason">本月無除權息事件。</p>
+    }
+}
+
+@code {
+    private static readonly string[] WeekdayNames = { "日", "一", "二", "三", "四", "五", "六" };
+
+    private DateOnly _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private List<DividendEvent>? _events;
+    private ILookup<int, DividendEvent>? _byDay;
+    private string? _error;
+
+    private int DaysInMonth => DateTime.DaysInMonth(_month.Year, _month.Month);
+    private int LeadingBlanks => (int)_month.DayOfWeek; // 週日 = 0
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task ShiftMonth(int delta)
+    {
+        _month = _month.AddMonths(delta);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _byDay = null;
+        try
+        {
+            var client = HttpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(Nav.BaseUri);
+            _events = await client.GetFromJsonAsync<List<DividendEvent>>(
+                $"api/calendar/dividends?month={_month:yyyy-MM}");
+            _byDay = (_events ?? new()).ToLookup(e => DateOnly.Parse(e.ExDate).Day);
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private static string Tooltip(DividendEvent ev)
+    {
+        var parts = new List<string> { $"{ev.Code} {ev.Name}".Trim() };
+        if (ev.EventType is { Length: > 0 })
+            parts.Add(ev.EventType);
+        if (ev.CashDividend is { } cash and > 0)
+            parts.Add($"現金 {cash:0.##}");
+        if (ev.StockRatio is { } ratio and > 0)
+            parts.Add($"配股 {ratio:0.####}");
+        return string.Join("｜", parts);
+    }
+}

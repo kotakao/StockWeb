@@ -45,6 +45,21 @@ public static partial class RequestValidation
         return true;
     }
 
+    /// <summary>月份參數（YYYY-MM）驗證，成功時帶出該月第一天。</summary>
+    public static bool TryValidateMonth(string? month, out DateOnly monthStart, out string? error)
+    {
+        monthStart = default;
+        if (string.IsNullOrWhiteSpace(month) ||
+            !DateOnly.TryParseExact($"{month}-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+        {
+            error = "month 格式錯誤：須為合法的 YYYY-MM。";
+            return false;
+        }
+        monthStart = parsed;
+        error = null;
+        return true;
+    }
+
     public static bool TryValidateDate(string? date, out string? error)
     {
         if (string.IsNullOrWhiteSpace(date) ||

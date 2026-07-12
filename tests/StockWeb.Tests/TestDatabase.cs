@@ -71,6 +71,8 @@ public sealed class TestDatabase : IDisposable
         using (var connection = new SqliteConnection(createConnectionString))
         {
             connection.Open();
+            // 比照正式 DB（Bot 端開啟 WAL）：讀寫互不阻塞，並行寫入靠 busy_timeout 等待而非立即 SQLITE_BUSY。
+            connection.Execute("PRAGMA journal_mode=WAL;");
             connection.Execute(Schema);
         }
 

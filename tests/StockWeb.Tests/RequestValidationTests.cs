@@ -87,6 +87,31 @@ public class RequestValidationTests
         Assert.NotNull(error);
     }
 
+    [Theory]
+    [InlineData("2026-08", 2026, 8)]
+    [InlineData("2025-01", 2025, 1)]
+    [InlineData("2026-12", 2026, 12)]
+    public void TryValidateMonth_ValidMonth_ReturnsFirstDay(string month, int year, int m)
+    {
+        Assert.True(RequestValidation.TryValidateMonth(month, out var start, out var error));
+        Assert.Null(error);
+        Assert.Equal(new DateOnly(year, m, 1), start);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("2026-13")]     // 月份不合法
+    [InlineData("2026-00")]     // 月份不合法
+    [InlineData("2026/08")]     // 分隔符錯誤
+    [InlineData("2026-08-01")]  // 多帶日
+    [InlineData("202608")]      // 無分隔符
+    public void TryValidateMonth_InvalidMonth_ReturnsFalseWithError(string? month)
+    {
+        Assert.False(RequestValidation.TryValidateMonth(month, out _, out var error));
+        Assert.NotNull(error);
+    }
+
     [Fact]
     public void TryValidateScreener_EmptyCriteria_IsValid()
     {
