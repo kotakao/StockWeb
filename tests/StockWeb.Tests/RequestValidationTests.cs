@@ -50,7 +50,7 @@ public class RequestValidationTests
 
     [Theory]
     [InlineData(1)]
-    [InlineData(252)]
+    [InlineData(60)]
     public void TryValidateMonths_WithinRange_ReturnsTrue(int months)
     {
         Assert.True(RequestValidation.TryValidateMonths(months, out _));
@@ -58,7 +58,7 @@ public class RequestValidationTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(253)]
+    [InlineData(61)]
     public void TryValidateMonths_OutOfRange_ReturnsFalse(int months)
     {
         Assert.False(RequestValidation.TryValidateMonths(months, out var error));

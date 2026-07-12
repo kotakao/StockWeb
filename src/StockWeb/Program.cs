@@ -20,6 +20,7 @@ builder.Services.AddScoped<IMarketRepository, MarketRepository>();
 builder.Services.AddScoped<IScreenerRepository, ScreenerRepository>();
 builder.Services.AddScoped<IWatchlistRepository, WatchlistRepository>();
 builder.Services.AddScoped<ICalendarRepository, CalendarRepository>();
+builder.Services.AddScoped<IStockRepository, StockRepository>();
 
 var app = builder.Build();
 
@@ -37,6 +38,7 @@ app.MapMarketEndpoints();
 app.MapScreenerEndpoints();
 app.MapWatchlistEndpoints();
 app.MapCalendarEndpoints();
+app.MapStockEndpoints();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

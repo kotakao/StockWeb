@@ -10,9 +10,9 @@ namespace StockWeb.Api;
 /// </summary>
 public static partial class RequestValidation
 {
-    /// <summary>days / months 類參數上限（§6）。</summary>
+    /// <summary>days / months 類參數上限（§6；days 252、months 60）。</summary>
     public const int MaxDays = 252;
-    public const int MaxMonths = 252;
+    public const int MaxMonths = 60;
 
     [GeneratedRegex(@"^[A-Za-z0-9]{4,6}$")]
     private static partial Regex CodePattern();

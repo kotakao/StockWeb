@@ -23,11 +23,22 @@ export function render(element, spec) {
 
         let series;
         switch (s.type) {
+            case 'candlestick':
+                // 台灣慣例：紅漲綠跌。
+                series = chart.addCandlestickSeries({
+                    priceScaleId: s.priceScaleId || 'right',
+                    upColor: '#d32f2f', downColor: '#2e7d32',
+                    borderUpColor: '#d32f2f', borderDownColor: '#2e7d32',
+                    wickUpColor: '#d32f2f', wickDownColor: '#2e7d32',
+                });
+                series.setData(s.candles);
+                continue;
             case 'histogram': series = chart.addHistogramSeries(options); break;
             case 'area': series = chart.addAreaSeries(options); break;
             default: series = chart.addLineSeries(options); break;
         }
-        series.setData(s.data);
+        // 逐點 color 為 null 時移除，讓 Lightweight 沿用序列預設色。
+        series.setData(s.data.map(p => (p.color ? p : { time: p.time, value: p.value })));
     }
 
     chart.timeScale().fitContent();

@@ -261,3 +261,70 @@ h1:focus {
     background: #ffe082;
     font-weight: 600;
 }
+
+/* 個股頁 */
+.stock-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.25rem;
+}
+
+.stock-header .stock-market {
+    font-size: 0.85rem;
+    color: #555;
+    border: 1px solid #cfd8dc;
+    border-radius: 3px;
+    padding: 0.05rem 0.4rem;
+}
+
+.stock-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.5rem 0 1rem;
+    font-size: 0.9rem;
+}
+
+.stock-dividends {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 1rem;
+}
+
+.stock-dividends .ev {
+    background: #eceff1;
+    border-radius: 3px;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.stock-charts {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+
+.stock-lower {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.stock-charts .card,
+.stock-lower .card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1rem;
+    background: #fff;
+}
+
+.stock-charts .card h2,
+.stock-lower .card h2 {
+    margin: 0 0 0.25rem;
+    font-size: 1.05rem;
+}

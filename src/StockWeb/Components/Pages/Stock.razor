@@ -1,0 +1,361 @@
+@page "/stock/{Code}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Nav
+
+<PageTitle>個股 @Code</PageTitle>
+
+@if (_quotes is null && _loadError is null)
+{
+    <p class="card-reason">載入中…</p>
+}
+else if (_loadError is not null)
+{
+    <h1>個股 @Code</h1>
+    <p class="error">無法載入：@_loadError</p>
+}
+else if (_notFound)
+{
+    <h1>查無代號 @Code</h1>
+    <p class="card-reason">資料庫沒有此股票代號的行情紀錄。請確認代號是否正確，或改由<a href="screener">條件選股</a>／<a href="watchlist">自選股</a>進入。</p>
+}
+else
+{
+    <div class="stock-header">
+        <h1>@_quotes!.Code @_quotes.Name</h1>
+        @if (MarketLabel is not null)
+        {
+            <span class="stock-market">@MarketLabel</span>
+        }
+    </div>
+
+    @if (_dividends is { Count: > 0 })
+    {
+        <div class="stock-dividends">
+            @foreach (var ev in _dividends)
+            {
+                <span class="ev">@ev.ExDate @DividendLabel(ev)</span>
+            }
+        </div>
+    }
+
+    <div class="stock-toolbar">
+        <label>
+            <input type="checkbox" checked="@_adjusted" @onchange="ToggleAdjustedAsync" disabled="@_quotesBusy" />
+            還原價（前復權）
+        </label>
+        @if (_quotesBusy)
+        {
+            <span class="card-reason">切換中…</span>
+        }
+    </div>
+
+    <div class="stock-charts">
+        <section class="card">
+            <h2>K 線（@(_adjusted ? "還原價" : "原始價")）</h2>
+            @if (BuildCandles() is { } kline)
+            {
+                <LightweightChart Spec="kline" @key="KlineKey" />
+            }
+            else
+            {
+                <p class="card-reason">尚無 K 線資料。</p>
+            }
+        </section>
+
+        <section class="card">
+            <h2>成交量（張）</h2>
+            @if (BuildVolume() is { } vol)
+            {
+                <LightweightChart Spec="vol" @key="@($"vol-{_adjusted}")" />
+            }
+            else
+            {
+                <p class="card-reason">尚無成交量資料。</p>
+            }
+        </section>
+
+        <section class="card">
+            <h2>三大法人買賣超合計（張）</h2>
+            @if (BuildInstitutional() is { } inst)
+            {
+                <LightweightChart Spec="inst" />
+            }
+            else
+            {
+                <p class="card-reason">尚無三大法人資料。</p>
+            }
+        </section>
+
+        <section class="card">
+            <h2>融資融券餘額</h2>
+            @if (BuildMargin() is { } margin)
+            {
+                <p class="card-caption">融資 <span class="dot" style="background:#6a1b9a"></span> · 融券 <span class="dot" style="background:#00838f"></span>（右軸融資、左軸融券）</p>
+                <LightweightChart Spec="margin" />
+            }
+            else
+            {
+                <p class="card-reason">尚無融資券資料。</p>
+            }
+        </section>
+    </div>
+
+    <div class="stock-lower">
+        <section class="card">
+            <h2>月營收 YoY（%）</h2>
+            @if (BuildRevenue() is { } rev)
+            {
+                <LightweightChart Spec="rev" />
+            }
+            else
+            {
+                <p class="card-reason">尚無月營收資料（自部署起累積）。</p>
+            }
+        </section>
+
+        <section class="card">
+            <h2>估值歷史</h2>
+            @if (BuildValuation() is { } val)
+            {
+                <p class="card-caption">本益比 <span class="dot" style="background:#1565c0"></span> · 淨值比 <span class="dot" style="background:#6a1b9a"></span>（右軸）· 殖利率% <span class="dot" style="background:#2e7d32"></span>（左軸）</p>
+                <LightweightChart Spec="val" />
+            }
+            else
+            {
+                <p class="card-reason">尚無估值資料。</p>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public string Code { get; set; } = "";
+
+    private StockQuotesResponse? _quotes;
+    private IReadOnlyList<StockInstitutionalRow>? _institutional;
+    private IReadOnlyList<StockMarginRow>? _margin;
+    private IReadOnlyList<StockValuationRow>? _valuation;
+    private IReadOnlyList<StockRevenueRow>? _revenue;
+    private IReadOnlyList<DividendEvent>? _dividends;
+
+    private bool _adjusted = true;
+    private bool _notFound;
+    private string? _loadError;
+    private bool _quotesBusy;
+    private string? _loadedCode;   // 已載入的代號，避免同代號重複載入
+
+    // K 線元素在還原/原始切換時強制重建（Lightweight 不就地換 series 型別資料）。
+    private string KlineKey => $"kline-{_adjusted}";
+
+    private string? MarketLabel => _quotes?.Market switch
+    {
+        "TWSE" => "上市",
+        "TPEX" => "上櫃",
+        null => null,
+        var m => m,
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedCode == Code)
+            return;
+        _loadedCode = Code;
+        await LoadAllAsync();
+    }
+
+    private HttpClient Client()
+    {
+        var client = HttpClientFactory.CreateClient();
+        client.BaseAddress = new Uri(Nav.BaseUri);
+        return client;
+    }
+
+    private async Task LoadAllAsync()
+    {
+        _quotes = null;
+        _notFound = false;
+        _loadError = null;
+        _adjusted = true;
+
+        try
+        {
+            var client = Client();
+            _quotes = await client.GetFromJsonAsync<StockQuotesResponse>(
+                $"api/stocks/{Code}/quotes?days=252&adjusted={_adjusted.ToString().ToLowerInvariant()}");
+
+            if (_quotes is null || _quotes.Quotes.Count == 0)
+            {
+                _notFound = true;
+                return;
+            }
+
+            // 其餘五組資料各自容錯：任一失敗不擋整頁（比照 Dashboard 分區容錯）。
+            _institutional = await SafeGet<List<StockInstitutionalRow>>(client, $"api/stocks/{Code}/institutional?days=60");
+            _margin = await SafeGet<List<StockMarginRow>>(client, $"api/stocks/{Code}/margin?days=60");
+            _valuation = await SafeGet<List<StockValuationRow>>(client, $"api/stocks/{Code}/valuation?days=252");
+            _revenue = await SafeGet<List<StockRevenueRow>>(client, $"api/stocks/{Code}/revenue?months=24");
+            _dividends = await SafeGet<List<DividendEvent>>(client, $"api/stocks/{Code}/dividends");
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+    }
+
+    private static async Task<T?> SafeGet<T>(HttpClient client, string url)
+    {
+        try
+        {
+            return await client.GetFromJsonAsync<T>(url);
+        }
+        catch
+        {
+            return default;
+        }
+    }
+
+    private async Task ToggleAdjustedAsync(ChangeEventArgs e)
+    {
+        _adjusted = e.Value is true;
+        _quotesBusy = true;
+        try
+        {
+            _quotes = await Client().GetFromJsonAsync<StockQuotesResponse>(
+                $"api/stocks/{Code}/quotes?days=252&adjusted={_adjusted.ToString().ToLowerInvariant()}");
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+        finally
+        {
+            _quotesBusy = false;
+        }
+    }
+
+    private static string DividendLabel(DividendEvent ev)
+    {
+        var parts = new List<string>();
+        if (ev.CashDividend is > 0)
+            parts.Add($"息{ev.CashDividend:0.##}");
+        if (ev.StockRatio is > 0)
+            parts.Add($"權{ev.StockRatio:0.###}");
+        var body = parts.Count > 0 ? string.Join("/", parts) : (ev.EventType ?? "除權息");
+        return body;
+    }
+
+    private ChartSpec? BuildCandles()
+    {
+        var candles = _quotes!.Quotes
+            .Where(q => q is { Open: not null, High: not null, Low: not null, Close: not null })
+            .Select(q => new ChartCandle(q.Date, q.Open!.Value, q.High!.Value, q.Low!.Value, q.Close!.Value))
+            .ToList();
+        if (candles.Count == 0)
+            return null;
+
+        return new ChartSpec(new List<ChartSeries>
+        {
+            new("candlestick", Array.Empty<ChartPoint>(), Candles: candles),
+        }, Height: 320);
+    }
+
+    private ChartSpec? BuildVolume()
+    {
+        var bars = _quotes!.Quotes
+            .Where(q => q.Volume is not null)
+            .Select(q => new ChartPoint(q.Date, Math.Round(q.Volume!.Value / 1000, 0), UpDownColor(q)))
+            .ToList();
+        return bars.Count > 0
+            ? new ChartSpec(new List<ChartSeries> { new("histogram", bars, Title: "成交量(張)") }, Height: 180)
+            : null;
+    }
+
+    // 收盤 >= 開盤為漲（紅），否則為跌（綠）；缺值時不上色（沿用序列預設）。
+    private static string? UpDownColor(StockQuote q)
+        => q is { Open: { } o, Close: { } c }
+            ? (c >= o ? "#d32f2f" : "#2e7d32")
+            : null;
+
+    private ChartSpec? BuildInstitutional()
+    {
+        if (_institutional is null || _institutional.Count == 0)
+            return null;
+
+        var bars = _institutional
+            .Select(r =>
+            {
+                var net = (r.ForeignNet ?? 0) + (r.TrustNet ?? 0) + (r.DealerNet ?? 0);
+                return new ChartPoint(r.Date, Math.Round(net / 1000, 0), net >= 0 ? "#d32f2f" : "#2e7d32");
+            })
+            .ToList();
+        return new ChartSpec(new List<ChartSeries> { new("histogram", bars, Title: "三大法人合計(張)") }, Height: 180);
+    }
+
+    private ChartSpec? BuildMargin()
+    {
+        if (_margin is null || _margin.Count == 0)
+            return null;
+
+        var financing = Points(_margin, r => r.MarginBalance);
+        var shortSell = Points(_margin, r => r.ShortBalance);
+        if (financing.Count == 0 && shortSell.Count == 0)
+            return null;
+
+        var series = new List<ChartSeries>();
+        if (financing.Count > 0)
+            series.Add(new ChartSeries("line", financing, "#6a1b9a", "right", "融資餘額"));
+        if (shortSell.Count > 0)
+            series.Add(new ChartSeries("line", shortSell, "#00838f", "left", "融券餘額"));
+        return new ChartSpec(series, LeftScale: shortSell.Count > 0, Height: 200);
+    }
+
+    private ChartSpec? BuildRevenue()
+    {
+        if (_revenue is null || _revenue.Count == 0)
+            return null;
+
+        var bars = _revenue
+            .Where(r => r.YoyPct is not null)
+            .Select(r => new ChartPoint(RevenueTime(r.YearMonth), r.YoyPct!.Value, r.YoyPct!.Value >= 0 ? "#d32f2f" : "#2e7d32"))
+            .ToList();
+        return bars.Count > 0
+            ? new ChartSpec(new List<ChartSeries> { new("histogram", bars, Title: "月營收YoY(%)") }, Height: 220)
+            : null;
+    }
+
+    // year_month（YYYY-MM）補上該月第一天，供圖表時間軸使用。
+    private static string RevenueTime(string yearMonth)
+        => yearMonth.Length == 7 ? $"{yearMonth}-01" : yearMonth;
+
+    private ChartSpec? BuildValuation()
+    {
+        if (_valuation is null || _valuation.Count == 0)
+            return null;
+
+        var pe = Points(_valuation, r => r.Pe);
+        var pb = Points(_valuation, r => r.Pb);
+        var yield = Points(_valuation, r => r.DividendYield);
+        if (pe.Count == 0 && pb.Count == 0 && yield.Count == 0)
+            return null;
+
+        var series = new List<ChartSeries>();
+        if (pe.Count > 0)
+            series.Add(new ChartSeries("line", pe, "#1565c0", "right", "本益比"));
+        if (pb.Count > 0)
+            series.Add(new ChartSeries("line", pb, "#6a1b9a", "right", "淨值比"));
+        if (yield.Count > 0)
+            series.Add(new ChartSeries("line", yield, "#2e7d32", "left", "殖利率%"));
+        return new ChartSpec(series, LeftScale: yield.Count > 0, Height: 220);
+    }
+
+    private static List<ChartPoint> Points(IReadOnlyList<StockValuationRow> rows, Func<StockValuationRow, double?> selector)
+        => rows.Where(r => selector(r) is not null)
+               .Select(r => new ChartPoint(r.Date, selector(r)!.Value))
+               .ToList();
+
+    private static List<ChartPoint> Points(IReadOnlyList<StockMarginRow> rows, Func<StockMarginRow, double?> selector)
+        => rows.Where(r => selector(r) is not null)
+               .Select(r => new ChartPoint(r.Date, selector(r)!.Value))
+               .ToList();
+}
