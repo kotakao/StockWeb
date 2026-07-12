@@ -1,4 +1,5 @@
 using StockWeb.Api;
+using StockWeb.Models;
 
 namespace StockWeb.Tests;
 
@@ -83,6 +84,70 @@ public class RequestValidationTests
     public void TryValidateDate_InvalidDate_ReturnsFalseWithError(string? date)
     {
         Assert.False(RequestValidation.TryValidateDate(date, out var error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void TryValidateScreener_EmptyCriteria_IsValid()
+    {
+        Assert.True(RequestValidation.TryValidateScreener(new ScreenerCriteria(), out var error));
+        Assert.Null(error);
+    }
+
+    [Theory]
+    [InlineData("TWSE")]
+    [InlineData("TPEX")]
+    [InlineData("ALL")]
+    [InlineData("twse")]   // 大小寫不敏感
+    public void TryValidateScreener_ValidMarket_ReturnsTrue(string market)
+    {
+        Assert.True(RequestValidation.TryValidateScreener(new ScreenerCriteria { Market = market }, out _));
+    }
+
+    [Theory]
+    [InlineData("NYSE")]
+    [InlineData("tw")]
+    public void TryValidateScreener_InvalidMarket_ReturnsFalse(string market)
+    {
+        Assert.False(RequestValidation.TryValidateScreener(new ScreenerCriteria { Market = market }, out var error));
+        Assert.NotNull(error);
+    }
+
+    [Theory]
+    [InlineData(0)]     // 須 >= 1
+    [InlineData(-1)]
+    [InlineData(253)]   // 超過上限 252
+    public void TryValidateScreener_BuyDaysOutOfRange_ReturnsFalse(int days)
+    {
+        Assert.False(RequestValidation.TryValidateScreener(new ScreenerCriteria { ForeignBuyDays = days }, out var error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void TryValidateScreener_NonPositivePeMax_ReturnsFalse()
+    {
+        Assert.False(RequestValidation.TryValidateScreener(new ScreenerCriteria { PeMax = 0 }, out var error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void TryValidateScreener_NegativeDividendYield_ReturnsFalse()
+    {
+        Assert.False(RequestValidation.TryValidateScreener(new ScreenerCriteria { DividendYieldMin = -1 }, out var error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void TryValidateScreener_NegativeRevenueYoy_IsAllowed()
+    {
+        // 營收衰退（負 YoY）也是合法篩選條件。
+        Assert.True(RequestValidation.TryValidateScreener(new ScreenerCriteria { RevenueYoyMin = -20 }, out _));
+    }
+
+    [Fact]
+    public void TryValidateScreener_NonFiniteValue_ReturnsFalse()
+    {
+        Assert.False(RequestValidation.TryValidateScreener(new ScreenerCriteria { VolumeMultipleMin = double.NaN }, out var error));
         Assert.NotNull(error);
     }
 }

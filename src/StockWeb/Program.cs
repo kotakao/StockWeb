@@ -17,6 +17,7 @@ var dbPath = builder.Configuration["DbPath"]
 builder.Services.AddSingleton<IDbConnectionFactory>(new SqliteConnectionFactory(dbPath));
 builder.Services.AddScoped<ICoverageRepository, CoverageRepository>();
 builder.Services.AddScoped<IMarketRepository, MarketRepository>();
+builder.Services.AddScoped<IScreenerRepository, ScreenerRepository>();
 
 var app = builder.Build();
 
@@ -31,6 +32,7 @@ app.UseAntiforgery();
 
 app.MapCoverageEndpoints();
 app.MapMarketEndpoints();
+app.MapScreenerEndpoints();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

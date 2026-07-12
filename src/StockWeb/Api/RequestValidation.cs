@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using StockWeb.Models;
 
 namespace StockWeb.Api;
 
@@ -50,6 +51,80 @@ public static partial class RequestValidation
             !DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
         {
             error = "日期格式錯誤：須為合法的 YYYY-MM-DD。";
+            return false;
+        }
+        error = null;
+        return true;
+    }
+
+    private static readonly HashSet<string> ValidMarkets = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TWSE", "TPEX", "ALL",
+    };
+
+    /// <summary>
+    /// 篩選條件驗證（全部選填）：market 須為 TWSE/TPEX/ALL；連買日數 1..252；數值須為有限值，
+    /// pe/pb/殖利率/量能倍數不得為負，量能倍數與 pe/pb 上限須大於 0；revenue_yoy 可為負（衰退亦為合法條件）。
+    /// </summary>
+    public static bool TryValidateScreener(ScreenerCriteria criteria, out string? error)
+    {
+        if (criteria.Market is not null && !ValidMarkets.Contains(criteria.Market.Trim()))
+        {
+            error = "market 須為 TWSE、TPEX 或 ALL。";
+            return false;
+        }
+        if (!TryValidatePositiveBound(criteria.PeMax, "pe_max", out error)) return false;
+        if (!TryValidateNonNegative(criteria.DividendYieldMin, "dividend_yield_min", out error)) return false;
+        if (!TryValidatePositiveBound(criteria.PbMax, "pb_max", out error)) return false;
+        if (!TryValidateFinite(criteria.RevenueYoyMin, "revenue_yoy_min", out error)) return false;
+        if (!TryValidatePositiveBound(criteria.VolumeMultipleMin, "volume_multiple_min", out error)) return false;
+        if (!TryValidateBuyDays(criteria.ForeignBuyDays, "foreign_buy_days", out error)) return false;
+        if (!TryValidateBuyDays(criteria.TrustBuyDays, "trust_buy_days", out error)) return false;
+
+        error = null;
+        return true;
+    }
+
+    private static bool TryValidateBuyDays(int? value, string name, out string? error)
+    {
+        if (value is { } v && (v < 1 || v > MaxDays))
+        {
+            error = $"{name} 須介於 1 到 {MaxDays} 之間。";
+            return false;
+        }
+        error = null;
+        return true;
+    }
+
+    private static bool TryValidateFinite(double? value, string name, out string? error)
+    {
+        if (value is { } v && !double.IsFinite(v))
+        {
+            error = $"{name} 須為有限數值。";
+            return false;
+        }
+        error = null;
+        return true;
+    }
+
+    private static bool TryValidateNonNegative(double? value, string name, out string? error)
+    {
+        if (!TryValidateFinite(value, name, out error)) return false;
+        if (value is { } v && v < 0)
+        {
+            error = $"{name} 不得為負。";
+            return false;
+        }
+        error = null;
+        return true;
+    }
+
+    private static bool TryValidatePositiveBound(double? value, string name, out string? error)
+    {
+        if (!TryValidateFinite(value, name, out error)) return false;
+        if (value is { } v && v <= 0)
+        {
+            error = $"{name} 須大於 0。";
             return false;
         }
         error = null;

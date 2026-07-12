@@ -71,3 +71,71 @@ h1:focus {
 .lw-chart {
     width: 100%;
 }
+
+/* 條件選股：左條件面板、右結果表 */
+.screener-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) 1fr;
+    gap: 1rem;
+    align-items: start;
+}
+
+.screener-panel {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1rem;
+    background: #fff;
+}
+
+.screener-panel h2 {
+    margin: 0 0 0.75rem;
+    font-size: 1.05rem;
+}
+
+.screener-panel label {
+    display: block;
+    margin-bottom: 0.6rem;
+    font-size: 0.85rem;
+    color: #555;
+}
+
+.screener-panel input,
+.screener-panel select {
+    display: block;
+    width: 100%;
+    margin-top: 0.15rem;
+    padding: 0.25rem;
+    box-sizing: border-box;
+}
+
+.screener-panel button {
+    margin-top: 0.5rem;
+    width: 100%;
+    padding: 0.4rem;
+    cursor: pointer;
+}
+
+.screener-results table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.screener-results th,
+.screener-results td {
+    border-bottom: 1px solid #eee;
+    padding: 0.3rem 0.6rem;
+    text-align: right;
+}
+
+.screener-results th:first-child,
+.screener-results td:first-child,
+.screener-results th:nth-child(2),
+.screener-results td:nth-child(2) {
+    text-align: left;
+}
+
+@media (max-width: 640px) {
+    .screener-layout {
+        grid-template-columns: 1fr;
+    }
+}

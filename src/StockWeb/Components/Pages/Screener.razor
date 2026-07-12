@@ -1,0 +1,197 @@
+@page "/screener"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Nav
+
+<PageTitle>條件選股</PageTitle>
+
+<h1>條件選股</h1>
+<p>各條件皆為選填、以 AND 組合。估值取最新交易日、月營收取最新月、連買日數取三大法人連續淨買超日、量能倍數為當日量對近 5 日均量。</p>
+
+<div class="screener-layout">
+    <section class="screener-panel">
+        <h2>篩選條件</h2>
+
+        <label>市場
+            <select @bind="_market">
+                <option value="ALL">全部</option>
+                <option value="TWSE">上市 TWSE</option>
+                <option value="TPEX">上櫃 TPEX</option>
+            </select>
+        </label>
+
+        <label>本益比上限（PE ≤）
+            <input type="number" step="any" @bind="_peMax" /></label>
+        <label>殖利率下限（% ≥）
+            <input type="number" step="any" @bind="_dividendYieldMin" /></label>
+        <label>股價淨值比上限（PB ≤）
+            <input type="number" step="any" @bind="_pbMax" /></label>
+        <label>月營收 YoY 下限（% ≥）
+            <input type="number" step="any" @bind="_revenueYoyMin" /></label>
+        <label>外資連續買超（日 ≥）
+            <input type="number" step="1" @bind="_foreignBuyDays" /></label>
+        <label>投信連續買超（日 ≥）
+            <input type="number" step="1" @bind="_trustBuyDays" /></label>
+        <label>量能倍數下限（倍 ≥）
+            <input type="number" step="any" @bind="_volumeMultipleMin" /></label>
+
+        <button @onclick="RunAsync" disabled="@_loading">@(_loading ? "篩選中…" : "開始篩選")</button>
+    </section>
+
+    <section class="screener-results">
+        @if (_error is not null)
+        {
+            <p class="error">篩選失敗：@_error</p>
+        }
+        else if (_rows is null)
+        {
+            <p class="card-reason">設定條件後按「開始篩選」。</p>
+        }
+        else if (_rows.Count == 0)
+        {
+            <p class="card-reason">沒有符合條件的股票。</p>
+        }
+        else
+        {
+            <p class="card-caption">共 @_rows.Count 檔（上限 200）。</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>代號</th>
+                        <th>名稱</th>
+                        <th>收盤</th>
+                        <th>漲跌%</th>
+                        @if (_shown.PeMax is not null)
+                        {
+                            <th>PE</th>
+                        }
+                        @if (_shown.DividendYieldMin is not null)
+                        {
+                            <th>殖利率%</th>
+                        }
+                        @if (_shown.PbMax is not null)
+                        {
+                            <th>PB</th>
+                        }
+                        @if (_shown.RevenueYoyMin is not null)
+                        {
+                            <th>營收YoY%</th>
+                        }
+                        @if (_shown.ForeignBuyDays is not null)
+                        {
+                            <th>外資連買日</th>
+                        }
+                        @if (_shown.TrustBuyDays is not null)
+                        {
+                            <th>投信連買日</th>
+                        }
+                        @if (_shown.VolumeMultipleMin is not null)
+                        {
+                            <th>量能倍數</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _rows)
+                    {
+                        <tr>
+                            <td><a href="stock/@row.Code">@row.Code</a></td>
+                            <td>@row.Name</td>
+                            <td>@Fmt(row.Close)</td>
+                            <td>@Fmt(row.ChangePct)</td>
+                            @if (_shown.PeMax is not null)
+                            {
+                                <td>@Fmt(row.Pe)</td>
+                            }
+                            @if (_shown.DividendYieldMin is not null)
+                            {
+                                <td>@Fmt(row.DividendYield)</td>
+                            }
+                            @if (_shown.PbMax is not null)
+                            {
+                                <td>@Fmt(row.Pb)</td>
+                            }
+                            @if (_shown.RevenueYoyMin is not null)
+                            {
+                                <td>@Fmt(row.RevenueYoy)</td>
+                            }
+                            @if (_shown.ForeignBuyDays is not null)
+                            {
+                                <td>@row.ForeignBuyDays</td>
+                            }
+                            @if (_shown.TrustBuyDays is not null)
+                            {
+                                <td>@row.TrustBuyDays</td>
+                            }
+                            @if (_shown.VolumeMultipleMin is not null)
+                            {
+                                <td>@Fmt(row.VolumeMultiple)</td>
+                            }
+                            @* 「加自選」鈕待 W4 自選清單完成後再開啟，此處先隱藏。 *@
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+</div>
+
+@code {
+    private string _market = "ALL";
+    private double? _peMax;
+    private double? _dividendYieldMin;
+    private double? _pbMax;
+    private double? _revenueYoyMin;
+    private int? _foreignBuyDays;
+    private int? _trustBuyDays;
+    private double? _volumeMultipleMin;
+
+    private IReadOnlyList<ScreenerRow>? _rows;
+    private ScreenerCriteria _shown = new();   // 上次送出的條件，決定結果表要顯示哪些觸發值欄。
+    private string? _error;
+    private bool _loading;
+
+    private static string Fmt(double? value) => value is { } v ? v.ToString("0.##") : "—";
+
+    private async Task RunAsync()
+    {
+        var criteria = new ScreenerCriteria
+        {
+            Market = _market,
+            PeMax = _peMax,
+            DividendYieldMin = _dividendYieldMin,
+            PbMax = _pbMax,
+            RevenueYoyMin = _revenueYoyMin,
+            ForeignBuyDays = _foreignBuyDays,
+            TrustBuyDays = _trustBuyDays,
+            VolumeMultipleMin = _volumeMultipleMin,
+        };
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            var client = HttpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(Nav.BaseUri);
+            var response = await client.PostAsJsonAsync("api/screener", criteria);
+            if (response.IsSuccessStatusCode)
+            {
+                _rows = await response.Content.ReadFromJsonAsync<List<ScreenerRow>>();
+                _shown = criteria;
+            }
+            else
+            {
+                var apiError = await response.Content.ReadFromJsonAsync<ApiError>();
+                _error = apiError?.Error ?? $"HTTP {(int)response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}
