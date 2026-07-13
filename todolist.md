@@ -81,45 +81,62 @@ D:\Programs\Python\StockDCbot\docs\stockweb-spec.md。
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>），不要 push。
 ```
 
-## ☐ W-R1：方案分層重構（單專案 → 四專案）——排程於 W6 之前執行
+## ☐ W-R1：方案分層重構（單專案 → 四專案，v2 修訂版）——排程於 W6 之前執行
+
+> v2 修訂原因（2026-07-13 決策記錄）：v1 假設的依賴方向 `Web → Services → Data
+> → Models` 與程式碼現實相反——本專案採「讀取端計算」：Data 層 Repository
+> 呼叫 Services 的純函數（StockRepository 用 AdjustedPriceService 與
+> QuoteAggregator、GetFinancialsAsync 用 FinancialsCalculator、
+> ScreenerRepository 用 ScreenerQueryBuilder.Build）。使用者已決策**不做
+> 邏輯搬遷、保持現狀**，故四專案的單向鏈修正為 `Web → Data → Services →
+> Models`。執行本區時嚴禁為了「顛倒方向」把讀取端計算搬出 Repository。
 
 ```text
 你的工作目錄是 D:\Programs\CSharp\StockWeb（Windows、git repo、main 分支、
-.NET 8 Blazor Server）。請先閱讀 AGENT.md（鐵律與工程慣例）與
-docs/architecture.md（現行結構導讀）。
+.NET 8 Blazor Server）。請先閱讀 AGENT.md（鐵律與工程慣例）、
+docs/architecture.md（現行結構導讀），以及本區塊上方的 v2 修訂原因說明。
 
 背景：目前為單一專案 src/StockWeb，分層靠資料夾約定維持。使用者習慣
-多專案分層方案，且希望依賴方向由編譯期強制。
+多專案分層方案，希望依賴方向由編譯期強制。注意：本專案為「讀取端計算」
+架構——Data 層 Repository 呼叫 Services 純函數，此為既定決策，不得改變。
 
-需求：將方案重構為四個專案，依賴方向單向往下（Web → Services → Data → Models）：
-1. src/StockWeb.Models（class library）：現 Models/ 的全部 DTO。無任何專案參考。
-2. src/StockWeb.Data（class library）：現 Data/ 的全部 Repository 與
-   SqliteConnectionFactory。僅參考 Models。Dapper 與 Microsoft.Data.Sqlite
+需求：將方案重構為四個專案，依賴方向單向往下
+（Web → Data → Services → Models）：
+1. src/StockWeb.Models（class library）：現 Models/ 的全部 DTO（含
+   DividendAdjustment）。無任何專案參考。
+2. src/StockWeb.Services（class library）：現 Services/ 的全部純函數類別
+   （AdjustedPriceService、QuoteAggregator 含 QuotePeriod enum、
+   FinancialsCalculator、ScreenerQueryBuilder、MarketBreadthCalculator）。
+   僅參考 Models。不得引入 Dapper/Sqlite 等資料庫套件。
+3. src/StockWeb.Data（class library）：現 Data/ 的全部 Repository 與
+   SqliteConnectionFactory。參考 Services 與 Models（Repository 呼叫
+   Services 的讀取端計算維持原位）。Dapper 與 Microsoft.Data.Sqlite
    套件參考移到此專案。
-3. src/StockWeb.Services（class library）：現 Services/ 的全部純邏輯類別。
-   參考 Data 與 Models。
 4. src/StockWeb.Web（Blazor Server 主專案，原 StockWeb 改名或重建擇一，
    保留 launchSettings 與 appsettings）：Components/、Api/（含
    RequestValidation，共用驗證 helper 留在 Web，不另建 Common 專案）、
-   wwwroot/、Program.cs。參考 Services、Data、Models。
+   wwwroot/、Program.cs。參考 Data、Services、Models。
 5. 命名空間隨專案名調整（StockWeb.Models 等）；檔案搬移盡量用 git mv
    保留歷史。
 6. tests/StockWeb.Tests 維持單一測試專案，參考上述四專案，測試程式
    只允許改 using/命名空間，任何斷言與測試邏輯不得更動。
-7. 這是純結構重構：嚴禁任何邏輯修改、重新命名類別、順手優化或
-   「改善」程式碼（AGENT.md Surgical Changes 從嚴適用）。行為必須零變化。
-8. 同步更新文件：docs/architecture.md 的資料夾對照表與路徑（§2、§4 追蹤
-   路線的檔案路徑）、AGENT.md 技術棧一節的專案結構描述、
+7. 這是純結構重構：嚴禁任何邏輯修改、重新命名類別、方法搬遷（特別是
+   Repository 內的還原/聚合/組譯呼叫）、順手優化或「改善」程式碼
+   （AGENT.md Surgical Changes 從嚴適用）。行為必須零變化。
+8. 同步更新文件：docs/architecture.md 的資料夾對照表、§1 總覽圖與 §4 追蹤
+   路線的檔案路徑（依賴方向描述改為 Web → Data → Services → Models）、
+   AGENT.md 技術棧一節的專案結構描述、
    D:\Programs\Python\StockDCbot\docs\stockweb-spec.md §5 的方案結構
    （spec 在另一個 repo，該檔更新後請於回報中註明，由管理流程在
    StockDCbot 端 commit，你不要在該 repo 執行 git 操作）。
 
-驗收：dotnet build 無警告無錯誤；dotnet test 全數通過且測試數量不得少於
-重構前（先記錄重構前數量並於回報中對照）；dotnet run --project
+驗收：dotnet build 無警告無錯誤；dotnet test 全數通過且**不得少於基準
+156 個**（重構前先實跑記錄實際數量並於回報中對照）；dotnet run --project
 src/StockWeb.Web 可啟動且六個頁面路由不變。完成後以 refactor 前綴 commit
 （訊息含「W-R1」，結尾加
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>），不要 push。
-回報：專案結構樹、重構前後測試數對照、文件更新清單、commit hash。
+回報：專案結構樹（含各專案的 ProjectReference 清單）、重構前後測試數
+對照、文件更新清單、commit hash。
 ```
 
 ## ☐ DC-K：法說會資料源（**派工於 StockDCbot**，W6 的前置）
