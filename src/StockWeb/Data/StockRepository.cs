@@ -34,7 +34,7 @@ public sealed class StockRepository : IStockRepository
 
     private sealed record EventRow(string ExDate, double? CashDividend, double? StockRatio);
 
-    public async Task<StockQuotesResponse> GetQuotesAsync(string code, int days, bool adjusted)
+    public async Task<StockQuotesResponse> GetQuotesAsync(string code, int days, bool adjusted, QuotePeriod period)
     {
         using var connection = _connectionFactory.CreateReadOnly();
 
@@ -59,8 +59,9 @@ public sealed class StockRepository : IStockRepository
                 quotes = AdjustedPriceService.Adjust(quotes, events).ToList();
         }
 
-        quotes.Reverse();   // 反轉為由舊到新
-        return new StockQuotesResponse(code, name, market, adjusted, quotes);
+        quotes.Reverse();   // 反轉為由舊到新（先還原再聚合）
+        var series = QuoteAggregator.Aggregate(quotes, period);
+        return new StockQuotesResponse(code, name, market, adjusted, series);
     }
 
     // 僅取落在資料序列日期範圍內 [oldest, newest] 的事件（非未來日）；表不存在時回空（不還原）。
@@ -115,7 +116,7 @@ public sealed class StockRepository : IStockRepository
         => await QueryAscendingAsync<StockValuationRow>(ValuationSql, code, days);
 
     private const string RevenueSql = """
-        SELECT year_month AS YearMonth, revenue AS Revenue, yoy_pct AS YoyPct
+        SELECT year_month AS YearMonth, revenue AS Revenue, yoy_pct AS YoyPct, cum_yoy_pct AS CumYoyPct
         FROM monthly_revenue
         WHERE code = @code
         ORDER BY year_month DESC
@@ -149,6 +150,36 @@ public sealed class StockRepository : IStockRepository
 
         var rows = await connection.QueryAsync<DividendEvent>(DividendsSql, new { code });
         return rows.ToList();
+    }
+
+    private const string FinancialsSql = """
+        SELECT year_quarter AS YearQuarter, revenue AS Revenue, gross_profit AS GrossProfit,
+               operating_income AS OperatingIncome, net_income AS NetIncome, eps AS Eps
+        FROM quarterly_financials
+        WHERE code = @code
+        ORDER BY year_quarter DESC
+        LIMIT @limit
+        """;
+
+    // year_quarter 為 YYYYQn，字串遞減排序即等同時間新到舊（同 StockDCbot get_quarterly_financials）。
+    private sealed record FinancialRawRow(
+        string YearQuarter, double? Revenue, double? GrossProfit,
+        double? OperatingIncome, double? NetIncome, double? Eps);
+
+    public async Task<IReadOnlyList<StockFinancialRow>> GetFinancialsAsync(string code, int quarters)
+    {
+        using var connection = _connectionFactory.CreateReadOnly();
+        if (!await TableExistsAsync(connection, "quarterly_financials"))
+            return Array.Empty<StockFinancialRow>();
+
+        var rows = (await connection.QueryAsync<FinancialRawRow>(FinancialsSql, new { code, limit = quarters })).ToList();
+        rows.Reverse();   // 由舊到新
+        return rows
+            .Select(r => new StockFinancialRow(
+                r.YearQuarter, r.Revenue, r.GrossProfit, r.OperatingIncome, r.NetIncome, r.Eps,
+                FinancialsCalculator.GrossMargin(r.Revenue, r.GrossProfit),
+                FinancialsCalculator.OperatingMargin(r.Revenue, r.OperatingIncome)))
+            .ToList();
     }
 
     // date DESC LIMIT 取最新 N 筆後反轉為由舊到新，供圖表時間軸使用。

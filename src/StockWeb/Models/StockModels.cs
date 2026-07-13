@@ -25,8 +25,23 @@ public record StockMarginRow(string Date, double? MarginBalance, double? ShortBa
 /// <summary>個股逐日估值（本益比／殖利率／淨值比）。</summary>
 public record StockValuationRow(string Date, double? Pe, double? DividendYield, double? Pb);
 
-/// <summary>個股月營收與 YoY。YearMonth 為 YYYY-MM。</summary>
-public record StockRevenueRow(string YearMonth, double? Revenue, double? YoyPct);
+/// <summary>個股月營收與 YoY。YearMonth 為 YYYY-MM；CumYoyPct 為累計營收 YoY。</summary>
+public record StockRevenueRow(string YearMonth, double? Revenue, double? YoyPct, double? CumYoyPct);
+
+/// <summary>
+/// 個股季度損益（quarterly_financials 最新至舊）。YearQuarter 為 YYYYQn。
+/// 金額欄位單位仟元、Eps 為元；GrossMargin／OperatingMargin 為讀取端計算的百分比（%），
+/// 缺營收時為 null（不存於資料庫，見 FinancialsCalculator）。
+/// </summary>
+public record StockFinancialRow(
+    string YearQuarter,
+    double? Revenue,
+    double? GrossProfit,
+    double? OperatingIncome,
+    double? NetIncome,
+    double? Eps,
+    double? GrossMargin,
+    double? OperatingMargin);
 
 /// <summary>
 /// 前復權事件輸入（AdjustedPriceService 用）。ExDate 為 ISO 日期字串（YYYY-MM-DD，

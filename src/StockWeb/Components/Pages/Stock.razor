@@ -29,6 +29,18 @@ else
         }
     </div>
 
+    <div class="metric-cards">
+        @foreach (var m in BuildMetrics())
+        {
+            <div class="metric-card @(m.MissingReason is null ? null : "metric-missing")"
+                 title="@(m.MissingReason ?? m.Label)">
+                <div class="metric-label">@m.Label</div>
+                <div class="metric-value">@m.Display</div>
+                <div class="metric-asof">@(m.AsOf ?? "—")</div>
+            </div>
+        }
+    </div>
+
     @if (_dividends is { Count: > 0 })
     {
         <div class="stock-dividends">
@@ -40,6 +52,13 @@ else
     }
 
     <div class="stock-toolbar">
+        <div class="period-switch">
+            @foreach (var (value, label) in Periods)
+            {
+                <button type="button" class="@(_period == value ? "active" : null)"
+                        @onclick="() => SetPeriodAsync(value)" disabled="@_quotesBusy">@label</button>
+            }
+        </div>
         <label>
             <input type="checkbox" checked="@_adjusted" @onchange="ToggleAdjustedAsync" disabled="@_quotesBusy" />
             還原價（前復權）
@@ -52,7 +71,7 @@ else
 
     <div class="stock-charts">
         <section class="card">
-            <h2>K 線（@(_adjusted ? "還原價" : "原始價")）</h2>
+            <h2>@PeriodLabel K 線（@(_adjusted ? "還原價" : "原始價")）</h2>
             @if (BuildCandles() is { } kline)
             {
                 <LightweightChart Spec="kline" @key="KlineKey" />
@@ -67,7 +86,7 @@ else
             <h2>成交量（張）</h2>
             @if (BuildVolume() is { } vol)
             {
-                <LightweightChart Spec="vol" @key="@($"vol-{_adjusted}")" />
+                <LightweightChart Spec="vol" @key="VolumeKey" />
             }
             else
             {
@@ -97,6 +116,46 @@ else
             else
             {
                 <p class="card-reason">尚無融資券資料。</p>
+            }
+        </section>
+    </div>
+
+    <h2 class="stock-section-title">季度損益</h2>
+    <div class="stock-lower">
+        <section class="card">
+            <h2>季度營收（億元）</h2>
+            @if (BuildQuarterlyRevenue() is { } qrev)
+            {
+                <LightweightChart Spec="qrev" />
+            }
+            else
+            {
+                <p class="card-reason">尚無季度損益資料（自部署起累積，多數個股目前僅最新一季）。</p>
+            }
+        </section>
+
+        <section class="card">
+            <h2>季度毛利率／營益率（%）</h2>
+            @if (BuildQuarterlyMargins() is { } qmargin)
+            {
+                <p class="card-caption">毛利率 <span class="dot" style="background:#6a1b9a"></span> · 營益率 <span class="dot" style="background:#00838f"></span></p>
+                <LightweightChart Spec="qmargin" />
+            }
+            else
+            {
+                <p class="card-reason">尚無季度毛利／營益資料。</p>
+            }
+        </section>
+
+        <section class="card">
+            <h2>季度 EPS（元）</h2>
+            @if (BuildQuarterlyEps() is { } qeps)
+            {
+                <LightweightChart Spec="qeps" />
+            }
+            else
+            {
+                <p class="card-reason">尚無季度 EPS 資料。</p>
             }
         </section>
     </div>
@@ -137,16 +196,29 @@ else
     private IReadOnlyList<StockMarginRow>? _margin;
     private IReadOnlyList<StockValuationRow>? _valuation;
     private IReadOnlyList<StockRevenueRow>? _revenue;
+    private IReadOnlyList<StockFinancialRow>? _financials;
     private IReadOnlyList<DividendEvent>? _dividends;
 
     private bool _adjusted = true;
+    private string _period = "daily";
     private bool _notFound;
     private string? _loadError;
     private bool _quotesBusy;
     private string? _loadedCode;   // 已載入的代號，避免同代號重複載入
 
-    // K 線元素在還原/原始切換時強制重建（Lightweight 不就地換 series 型別資料）。
-    private string KlineKey => $"kline-{_adjusted}";
+    private static readonly (string Value, string Label)[] Periods =
+    {
+        ("daily", "日"), ("weekly", "週"), ("monthly", "月"), ("yearly", "年"),
+    };
+
+    private string PeriodLabel => _period switch
+    {
+        "weekly" => "週", "monthly" => "月", "yearly" => "年", _ => "日",
+    };
+
+    // K 線／成交量在還原或週期切換時強制重建（Lightweight 不就地換資料型別）。
+    private string KlineKey => $"kline-{_adjusted}-{_period}";
+    private string VolumeKey => $"vol-{_adjusted}-{_period}";
 
     private string? MarketLabel => _quotes?.Market switch
     {
@@ -177,12 +249,12 @@ else
         _notFound = false;
         _loadError = null;
         _adjusted = true;
+        _period = "daily";
 
         try
         {
             var client = Client();
-            _quotes = await client.GetFromJsonAsync<StockQuotesResponse>(
-                $"api/stocks/{Code}/quotes?days=252&adjusted={_adjusted.ToString().ToLowerInvariant()}");
+            _quotes = await client.GetFromJsonAsync<StockQuotesResponse>(QuotesUrl());
 
             if (_quotes is null || _quotes.Quotes.Count == 0)
             {
@@ -190,11 +262,12 @@ else
                 return;
             }
 
-            // 其餘五組資料各自容錯：任一失敗不擋整頁（比照 Dashboard 分區容錯）。
+            // 其餘資料各自容錯：任一失敗不擋整頁（比照 Dashboard 分區容錯）。
             _institutional = await SafeGet<List<StockInstitutionalRow>>(client, $"api/stocks/{Code}/institutional?days=60");
             _margin = await SafeGet<List<StockMarginRow>>(client, $"api/stocks/{Code}/margin?days=60");
             _valuation = await SafeGet<List<StockValuationRow>>(client, $"api/stocks/{Code}/valuation?days=252");
             _revenue = await SafeGet<List<StockRevenueRow>>(client, $"api/stocks/{Code}/revenue?months=24");
+            _financials = await SafeGet<List<StockFinancialRow>>(client, $"api/stocks/{Code}/financials?quarters=20");
             _dividends = await SafeGet<List<DividendEvent>>(client, $"api/stocks/{Code}/dividends");
         }
         catch (Exception ex)
@@ -202,6 +275,9 @@ else
             _loadError = ex.Message;
         }
     }
+
+    private string QuotesUrl()
+        => $"api/stocks/{Code}/quotes?days=252&adjusted={_adjusted.ToString().ToLowerInvariant()}&period={_period}";
 
     private static async Task<T?> SafeGet<T>(HttpClient client, string url)
     {
@@ -218,11 +294,24 @@ else
     private async Task ToggleAdjustedAsync(ChangeEventArgs e)
     {
         _adjusted = e.Value is true;
+        await ReloadQuotesAsync();
+    }
+
+    private async Task SetPeriodAsync(string period)
+    {
+        if (_period == period)
+            return;
+        _period = period;
+        await ReloadQuotesAsync();
+    }
+
+    // 還原或週期切換僅重抓 K 線；其餘副圖不隨週期改變。
+    private async Task ReloadQuotesAsync()
+    {
         _quotesBusy = true;
         try
         {
-            _quotes = await Client().GetFromJsonAsync<StockQuotesResponse>(
-                $"api/stocks/{Code}/quotes?days=252&adjusted={_adjusted.ToString().ToLowerInvariant()}");
+            _quotes = await Client().GetFromJsonAsync<StockQuotesResponse>(QuotesUrl());
         }
         catch (Exception ex)
         {
@@ -244,6 +333,44 @@ else
         var body = parts.Count > 0 ? string.Join("/", parts) : (ev.EventType ?? "除權息");
         return body;
     }
+
+    // ── 頁首指標卡 ──
+    private record Metric(string Label, string Display, string? AsOf, string? MissingReason);
+
+    private IReadOnlyList<Metric> BuildMetrics()
+    {
+        var v = _valuation is { Count: > 0 } ? _valuation[^1] : null;   // 估值最新日
+        var r = _revenue is { Count: > 0 } ? _revenue[^1] : null;      // 月營收最新月
+        var f = _financials is { Count: > 0 } ? _financials[^1] : null; // 季損益最新季
+
+        const string valReason = "尚無估值資料";
+        const string revReason = "尚無月營收資料（自部署起累積）";
+        const string finReason = "尚無季度損益資料";
+
+        return new List<Metric>
+        {
+            Metric_("本益比", v?.Pe, v?.Date, valReason, x => x.ToString("0.##")),
+            Metric_("股價淨值比", v?.Pb, v?.Date, valReason, x => x.ToString("0.##")),
+            Metric_("殖利率", v?.DividendYield, v?.Date, valReason, x => $"{x:0.##}%"),
+            Metric_("月營收 YoY", r?.YoyPct, r?.YearMonth, revReason, Pct),
+            Metric_("累計營收 YoY", r?.CumYoyPct, r?.YearMonth, revReason, Pct),
+            Metric_("毛利率", f?.GrossMargin, f?.YearQuarter, finReason, x => $"{x:0.##}%"),
+            Metric_("營業利益率", f?.OperatingMargin, f?.YearQuarter, finReason, x => $"{x:0.##}%"),
+            Metric_("EPS", f?.Eps, f?.YearQuarter, finReason, x => x.ToString("0.##")),
+        };
+    }
+
+    // asOf 為 null 代表整個資料來源缺漏；有 asOf 但值為 null 代表該期缺該欄位。兩者皆顯示「—」。
+    private static Metric Metric_(string label, double? value, string? asOf, string sourceReason, Func<double, string> format)
+    {
+        if (asOf is null)
+            return new Metric(label, "—", null, sourceReason);
+        if (value is null)
+            return new Metric(label, "—", asOf, "該期無此欄位資料");
+        return new Metric(label, format(value.Value), asOf, null);
+    }
+
+    private static string Pct(double v) => $"{v:+0.##;-0.##;0}%";
 
     private ChartSpec? BuildCandles()
     {
@@ -327,6 +454,72 @@ else
     // year_month（YYYY-MM）補上該月第一天，供圖表時間軸使用。
     private static string RevenueTime(string yearMonth)
         => yearMonth.Length == 7 ? $"{yearMonth}-01" : yearMonth;
+
+    // ── 季度損益趨勢 ──
+    private ChartSpec? BuildQuarterlyRevenue()
+    {
+        if (_financials is null || _financials.Count == 0)
+            return null;
+
+        // 營收原單位為仟元 → 億元（÷100000）。
+        var bars = _financials
+            .Where(f => f.Revenue is not null)
+            .Select(f => new ChartPoint(QuarterTime(f.YearQuarter), Math.Round(f.Revenue!.Value / 100000, 2), "#1565c0"))
+            .ToList();
+        return bars.Count > 0
+            ? new ChartSpec(new List<ChartSeries> { new("histogram", bars, Title: "營收(億元)") }, Height: 200)
+            : null;
+    }
+
+    private ChartSpec? BuildQuarterlyMargins()
+    {
+        if (_financials is null || _financials.Count == 0)
+            return null;
+
+        var gross = FinPoints(f => f.GrossMargin);
+        var op = FinPoints(f => f.OperatingMargin);
+        if (gross.Count == 0 && op.Count == 0)
+            return null;
+
+        var series = new List<ChartSeries>();
+        if (gross.Count > 0)
+            series.Add(new ChartSeries("line", gross, "#6a1b9a", "right", "毛利率%"));
+        if (op.Count > 0)
+            series.Add(new ChartSeries("line", op, "#00838f", "right", "營益率%"));
+        return new ChartSpec(series, Height: 200);
+    }
+
+    private ChartSpec? BuildQuarterlyEps()
+    {
+        if (_financials is null || _financials.Count == 0)
+            return null;
+
+        var bars = _financials
+            .Where(f => f.Eps is not null)
+            .Select(f => new ChartPoint(QuarterTime(f.YearQuarter), f.Eps!.Value, f.Eps!.Value >= 0 ? "#d32f2f" : "#2e7d32"))
+            .ToList();
+        return bars.Count > 0
+            ? new ChartSpec(new List<ChartSeries> { new("histogram", bars, Title: "EPS(元)") }, Height: 200)
+            : null;
+    }
+
+    private List<ChartPoint> FinPoints(Func<StockFinancialRow, double?> selector)
+        => _financials!.Where(f => selector(f) is not null)
+                       .Select(f => new ChartPoint(QuarterTime(f.YearQuarter), selector(f)!.Value))
+                       .ToList();
+
+    // year_quarter（YYYYQn）→ 該季末日，供圖表時間軸使用；格式不符時原樣回傳。
+    private static string QuarterTime(string yearQuarter)
+    {
+        if (yearQuarter.Length == 6 &&
+            int.TryParse(yearQuarter[..4], out var year) &&
+            int.TryParse(yearQuarter[5..], out var quarter) && quarter is >= 1 and <= 4)
+        {
+            var (month, day) = quarter switch { 1 => (3, 31), 2 => (6, 30), 3 => (9, 30), _ => (12, 31) };
+            return $"{year:D4}-{month:D2}-{day:D2}";
+        }
+        return yearQuarter;
+    }
 
     private ChartSpec? BuildValuation()
     {

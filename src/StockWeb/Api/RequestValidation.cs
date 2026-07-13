@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using StockWeb.Models;
+using StockWeb.Services;
 
 namespace StockWeb.Api;
 
@@ -10,9 +11,10 @@ namespace StockWeb.Api;
 /// </summary>
 public static partial class RequestValidation
 {
-    /// <summary>days / months 類參數上限（§6；days 252、months 60）。</summary>
+    /// <summary>days / months / quarters 類參數上限（§6；days 252、months 60、quarters 40）。</summary>
     public const int MaxDays = 252;
     public const int MaxMonths = 60;
+    public const int MaxQuarters = 40;
 
     [GeneratedRegex(@"^[A-Za-z0-9]{4,6}$")]
     private static partial Regex CodePattern();
@@ -33,6 +35,27 @@ public static partial class RequestValidation
 
     public static bool TryValidateMonths(int months, out string? error)
         => TryValidateRange(months, MaxMonths, "months", out error);
+
+    public static bool TryValidateQuarters(int quarters, out string? error)
+        => TryValidateRange(quarters, MaxQuarters, "quarters", out error);
+
+    /// <summary>K 線週期參數：daily/weekly/monthly/yearly（大小寫不敏感），成功時帶出對應列舉。</summary>
+    public static bool TryValidatePeriod(string? period, out QuotePeriod result, out string? error)
+    {
+        result = QuotePeriod.Daily;
+        switch ((period ?? "daily").Trim().ToLowerInvariant())
+        {
+            case "daily": result = QuotePeriod.Daily; break;
+            case "weekly": result = QuotePeriod.Weekly; break;
+            case "monthly": result = QuotePeriod.Monthly; break;
+            case "yearly": result = QuotePeriod.Yearly; break;
+            default:
+                error = "period 須為 daily、weekly、monthly 或 yearly。";
+                return false;
+        }
+        error = null;
+        return true;
+    }
 
     private static bool TryValidateRange(int value, int max, string name, out string? error)
     {

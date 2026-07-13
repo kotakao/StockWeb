@@ -9,17 +9,22 @@ public static class StockEndpoints
     private const int DefaultQuoteDays = 252;   // K 線／估值預設近一年交易日
     private const int DefaultFlowDays = 60;     // 法人／融資券預設近 60 交易日
     private const int DefaultRevenueMonths = 24;
+    private const int DefaultFinancialsQuarters = 20;
 
     public static void MapStockEndpoints(this IEndpointRouteBuilder app)
     {
-        // GET /api/stocks/{code}/quotes?days=&adjusted= — OHLCV，adjusted 控制前復權。
+        // GET /api/stocks/{code}/quotes?days=&adjusted=&period= — OHLCV，adjusted 控制前復權，
+        // period（daily/weekly/monthly/yearly）控制聚合週期。
         app.MapGet("/api/stocks/{code}/quotes", async (
-            string code, IStockRepository repository, int days = DefaultQuoteDays, bool adjusted = true) =>
+            string code, IStockRepository repository,
+            int days = DefaultQuoteDays, bool adjusted = true, string period = "daily") =>
         {
             if (!TryValidate(code, days, RequestValidation.TryValidateDays, out var error))
                 return Results.BadRequest(error);
+            if (!RequestValidation.TryValidatePeriod(period, out var quotePeriod, out var periodError))
+                return Results.BadRequest(new ApiError(periodError!));
 
-            return Results.Ok(await repository.GetQuotesAsync(code, days, adjusted));
+            return Results.Ok(await repository.GetQuotesAsync(code, days, adjusted, quotePeriod));
         });
 
         // GET /api/stocks/{code}/institutional?days= — 逐日三大法人。
@@ -69,6 +74,16 @@ public static class StockEndpoints
                 return Results.BadRequest(new ApiError(codeError!));
 
             return Results.Ok(await repository.GetDividendsAsync(code));
+        });
+
+        // GET /api/stocks/{code}/financials?quarters= — 季度損益（quarters 上限 40）。
+        app.MapGet("/api/stocks/{code}/financials", async (
+            string code, IStockRepository repository, int quarters = DefaultFinancialsQuarters) =>
+        {
+            if (!TryValidate(code, quarters, RequestValidation.TryValidateQuarters, out var error))
+                return Results.BadRequest(error);
+
+            return Results.Ok(await repository.GetFinancialsAsync(code, quarters));
         });
     }
 

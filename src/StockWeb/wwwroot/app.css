@@ -328,3 +328,78 @@ h1:focus {
     margin: 0 0 0.25rem;
     font-size: 1.05rem;
 }
+
+/* 頁首指標卡列 */
+.metric-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.6rem;
+    margin: 0.75rem 0 1rem;
+}
+
+.metric-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 0.55rem 0.7rem;
+    background: #fff;
+}
+
+.metric-card.metric-missing {
+    background: #fafafa;
+}
+
+.metric-card .metric-label {
+    font-size: 0.78rem;
+    color: #607d8b;
+}
+
+.metric-card .metric-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.metric-card.metric-missing .metric-value {
+    color: #b0bec5;
+}
+
+.metric-card .metric-asof {
+    font-size: 0.72rem;
+    color: #90a4ae;
+}
+
+/* K 線週期切換 */
+.period-switch {
+    display: inline-flex;
+    border: 1px solid #cfd8dc;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.period-switch button {
+    border: none;
+    background: #fff;
+    padding: 0.2rem 0.7rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-left: 1px solid #eceff1;
+}
+
+.period-switch button:first-child {
+    border-left: none;
+}
+
+.period-switch button.active {
+    background: #1565c0;
+    color: #fff;
+}
+
+.period-switch button:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.stock-section-title {
+    margin: 1.5rem 0 0;
+    font-size: 1.1rem;
+}

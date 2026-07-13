@@ -1,5 +1,6 @@
 using StockWeb.Api;
 using StockWeb.Models;
+using StockWeb.Services;
 
 namespace StockWeb.Tests;
 
@@ -109,6 +110,50 @@ public class RequestValidationTests
     public void TryValidateMonth_InvalidMonth_ReturnsFalseWithError(string? month)
     {
         Assert.False(RequestValidation.TryValidateMonth(month, out _, out var error));
+        Assert.NotNull(error);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(20)]
+    [InlineData(40)]
+    public void TryValidateQuarters_WithinRange_ReturnsTrue(int quarters)
+    {
+        Assert.True(RequestValidation.TryValidateQuarters(quarters, out var error));
+        Assert.Null(error);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(41)]   // 超過上限 40
+    public void TryValidateQuarters_OutOfRange_ReturnsFalse(int quarters)
+    {
+        Assert.False(RequestValidation.TryValidateQuarters(quarters, out var error));
+        Assert.NotNull(error);
+    }
+
+    [Theory]
+    [InlineData("daily", QuotePeriod.Daily)]
+    [InlineData("weekly", QuotePeriod.Weekly)]
+    [InlineData("monthly", QuotePeriod.Monthly)]
+    [InlineData("yearly", QuotePeriod.Yearly)]
+    [InlineData("WEEKLY", QuotePeriod.Weekly)]   // 大小寫不敏感
+    [InlineData(null, QuotePeriod.Daily)]        // 預設 daily
+    public void TryValidatePeriod_Valid_ReturnsEnum(string? period, QuotePeriod expected)
+    {
+        Assert.True(RequestValidation.TryValidatePeriod(period, out var result, out var error));
+        Assert.Null(error);
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [InlineData("hourly")]
+    [InlineData("d")]
+    [InlineData("")]
+    public void TryValidatePeriod_Invalid_ReturnsFalse(string period)
+    {
+        Assert.False(RequestValidation.TryValidatePeriod(period, out _, out var error));
         Assert.NotNull(error);
     }
 
