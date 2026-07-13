@@ -67,8 +67,14 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 技術棧
 
-- **.NET 8 Blazor Server**（單一專案 `src/StockWeb`，API 與頁面同專案）
-- **Dapper + Microsoft.Data.Sqlite**（Data/ 連線工廠：唯讀 `Mode=ReadOnly` 與讀寫兩種，讀寫連線 `busy_timeout=5000`）
+- **.NET 8 Blazor Server**，方案分四專案，依賴方向單向往下
+  `Web → Data → Services → Models`（編譯期強制）：
+  - `src/StockWeb.Web`（Blazor Server 主專案，Components/ 與 Api/ 同專案；
+    AssemblyName 與 RootNamespace 維持 `StockWeb`）
+  - `src/StockWeb.Data`（Repository 與連線工廠；讀取端計算沿用 Services）
+  - `src/StockWeb.Services`（純函數計算，僅參考 Models）
+  - `src/StockWeb.Models`（DTO record，無任何參考）
+- **Dapper + Microsoft.Data.Sqlite**（`StockWeb.Data` 連線工廠：唯讀 `Mode=ReadOnly` 與讀寫兩種，讀寫連線 `busy_timeout=5000`）
 - **TradingView Lightweight Charts**（`Components/Charts/LightweightChart.razor` JS Interop 包裝 + `wwwroot/js/charts.js`）
 - 測試：**xUnit**（`tests/StockWeb.Tests`），Data 層以「測試建立的暫時 SQLite 檔＋最小 schema」fixture
 
@@ -92,7 +98,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ```powershell
 dotnet build          # 應無警告無錯誤
 dotnet test           # 全數通過方可 commit
-dotnet run --project src/StockWeb
+dotnet run --project src/StockWeb.Web
 ```
 
 - 完成每個功能區後：全測試綠 → 以 `feat:`/`fix:`/`chore:` 前綴 commit（訊息含功能區編號，結尾加 `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`），**不要 push**（push 由管理流程統一執行）。

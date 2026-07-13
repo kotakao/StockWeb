@@ -23,7 +23,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\StockWeb\StockWeb.csproj" />
+    <ProjectReference Include="..\..\src\StockWeb.Web\StockWeb.Web.csproj" />
+    <ProjectReference Include="..\..\src\StockWeb.Data\StockWeb.Data.csproj" />
+    <ProjectReference Include="..\..\src\StockWeb.Services\StockWeb.Services.csproj" />
+    <ProjectReference Include="..\..\src\StockWeb.Models\StockWeb.Models.csproj" />
   </ItemGroup>
 
 </Project>

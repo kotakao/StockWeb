@@ -11,16 +11,20 @@
 ```
 瀏覽器
   │
-  ├─（頁面互動）Blazor Server：Components/Pages/*.razor ←── SignalR 長連線，事件回到伺服器執行 C#
+  ├─（頁面互動）Blazor Server：StockWeb.Web/Components/Pages/*.razor ←── SignalR 長連線，事件回到伺服器執行 C#
   │                       │
-  └─（HTTP API）Api/*Endpoints.cs（= Controller）
+  └─（HTTP API）StockWeb.Web/Api/*Endpoints.cs（= Controller）
                           │
-                    Services/*（純商業邏輯，可單元測試）
-                          │
-                    Data/*Repository.cs（Dapper SQL）
-                          │
-                    data/market.db（SQLite，唯讀為主；schema 歸 StockDCbot 管）
+              StockWeb.Data/*Repository.cs（Dapper SQL；讀取端計算呼叫 Services）
+                    │                    │
+                    │           StockWeb.Services/*（純商業邏輯，可單元測試）
+                    │                    │
+                    │           StockWeb.Models/*（DTO record，無任何參考）
+                    │
+              data/market.db（SQLite，唯讀為主；schema 歸 StockDCbot 管）
 ```
+
+方案分四專案，依賴方向由編譯期單向強制：**Web → Data → Services → Models**。注意本專案為「讀取端計算」架構——`StockWeb.Data` 的 Repository 直接呼叫 `StockWeb.Services` 的純函數（前復權、聚合、SQL 組譯），故 Data 參考 Services，而非相反。
 
 兩條入口最後匯流到同一套 Repository：頁面直接注入 Repository/Service 使用；`/api/*` 端點給外部或 JS 呼叫。
 
@@ -28,16 +32,16 @@
 
 ## 2. 資料夾 ↔ MVC 對照表
 
-| 資料夾 | MVC 對應 | 內容 | 命名規則 |
+| 資料夾（所屬專案） | MVC 對應 | 內容 | 命名規則 |
 |---|---|---|---|
-| `Api/` | **Controller** | Minimal API 端點，一個功能族群一檔（`StockEndpoints.cs` ≈ `StockController`）；`RequestValidation.cs` 是共用的參數驗證（≈ ActionFilter） | `Map{名詞}Endpoints` 擴充方法，在 `Program.cs` 註冊 |
-| `Services/` | **Controller 抽出的商業邏輯** | 純 C# 類別，不碰 HTTP 也不碰資料庫連線（`AdjustedPriceService` 前復權、`QuoteAggregator` 週/月/年 K 聚合、`ScreenerQueryBuilder` 篩選 SQL 組譯、`MarketBreadthCalculator`、`FinancialsCalculator`） | 每個都有對應的 `tests/*Tests.cs` |
-| `Data/` | **Model（資料存取）** | Dapper Repository，一個介面一個實作（`IStockRepository` / `StockRepository`）；`SqliteConnectionFactory` 管唯讀/讀寫連線 | SQL 都在這層，其他層看不到 SQL |
-| `Models/` | **Model（DTO/ViewModel）** | record 型別，API 回應與頁面顯示共用 | 無邏輯，純資料形狀 |
-| `Components/Pages/` | **View ＋ 該頁的 Controller 程式** | 每個 .razor = 一頁；上半是 HTML 模板，`@code` 區塊是這頁的後端邏輯 | 檔名 = 路由（`Stock.razor` → `/stock/{code}`） |
-| `Components/Charts/` | 共用 View 元件 | `LightweightChart.razor` 是所有圖表的唯一入口（JS Interop 包裝） | 不要繞過它直接呼叫 JS |
-| `wwwroot/js/` | 前端靜態資源 | `charts.js`（interop 膠水）＋ lightweight-charts 函式庫本體 | 專案裡僅有的 JS，只服務圖表 |
-| `Program.cs` | `Startup.cs` | DI 註冊 ＋ `Map*Endpoints()` ＋ Blazor 管線 | 找「誰被注入了什麼」看這裡 |
+| `StockWeb.Web/Api/` | **Controller** | Minimal API 端點，一個功能族群一檔（`StockEndpoints.cs` ≈ `StockController`）；`RequestValidation.cs` 是共用的參數驗證（≈ ActionFilter，留在 Web 專案） | `Map{名詞}Endpoints` 擴充方法，在 `Program.cs` 註冊 |
+| `StockWeb.Services/` | **Controller 抽出的商業邏輯** | 純 C# 類別，不碰 HTTP 也不碰資料庫連線（`AdjustedPriceService` 前復權、`QuoteAggregator` 週/月/年 K 聚合、`ScreenerQueryBuilder` 篩選 SQL 組譯、`MarketBreadthCalculator`、`FinancialsCalculator`）；獨立專案，僅參考 Models | 每個都有對應的 `tests/*Tests.cs` |
+| `StockWeb.Data/` | **Model（資料存取）** | Dapper Repository，一個介面一個實作（`IStockRepository` / `StockRepository`）；`SqliteConnectionFactory` 管唯讀/讀寫連線；Dapper 與 Microsoft.Data.Sqlite 套件參考在此專案 | SQL 都在這層，其他層看不到 SQL |
+| `StockWeb.Models/` | **Model（DTO/ViewModel）** | record 型別，API 回應與頁面顯示共用；獨立專案，無任何參考 | 無邏輯，純資料形狀 |
+| `StockWeb.Web/Components/Pages/` | **View ＋ 該頁的 Controller 程式** | 每個 .razor = 一頁；上半是 HTML 模板，`@code` 區塊是這頁的後端邏輯 | 檔名 = 路由（`Stock.razor` → `/stock/{code}`） |
+| `StockWeb.Web/Components/Charts/` | 共用 View 元件 | `LightweightChart.razor` 是所有圖表的唯一入口（JS Interop 包裝） | 不要繞過它直接呼叫 JS |
+| `StockWeb.Web/wwwroot/js/` | 前端靜態資源 | `charts.js`（interop 膠水）＋ lightweight-charts 函式庫本體 | 專案裡僅有的 JS，只服務圖表 |
+| `StockWeb.Web/Program.cs` | `Startup.cs` | DI 註冊 ＋ `Map*Endpoints()` ＋ Blazor 管線 | 找「誰被注入了什麼」看這裡 |
 
 ---
 
@@ -66,22 +70,22 @@
 ## 4. 三條追蹤路線（實際檔案，照著讀一遍就熟了）
 
 ### 路線 A：篩選器（最短，先讀這條）
-1. `Components/Pages/Screener.razor` — 條件表單與結果表格
-2. `Services/ScreenerQueryBuilder.cs` — 條件 → 參數化 SQL（純函數，看測試 `ScreenerQueryBuilderTests` 最快）
-3. `Data/ScreenerRepository.cs` — 執行 SQL
-4. （外部入口）`Api/ScreenerEndpoints.cs` — `POST /api/screener` 的 Controller 版同一流程
+1. `StockWeb.Web/Components/Pages/Screener.razor` — 條件表單與結果表格
+2. `StockWeb.Services/ScreenerQueryBuilder.cs` — 條件 → 參數化 SQL（純函數，看測試 `ScreenerQueryBuilderTests` 最快）
+3. `StockWeb.Data/ScreenerRepository.cs` — 執行 SQL（呼叫上一步的 Builder）
+4. （外部入口）`StockWeb.Web/Api/ScreenerEndpoints.cs` — `POST /api/screener` 的 Controller 版同一流程
 
 ### 路線 B：個股頁 K 線（最核心，含 JS 邊界）
-1. `Components/Pages/Stock.razor` — 週期/還原切換按鈕在這
-2. `Data/StockRepository.cs` — 撈日 K 原始列
-3. `Services/AdjustedPriceService.cs` — 前復權（公式與 StockDCbot `analysis.adjust_history` 對齊）
-4. `Services/QuoteAggregator.cs` — 日 K → 週/月/年 K 聚合（先還原、再聚合）
-5. `Components/Charts/LightweightChart.razor` ＋ `wwwroot/js/charts.js` — C#→JS 的唯一邊界：C# 把序列化好的資料丟給 JS 畫圖，JS 不含任何商業邏輯
+1. `StockWeb.Web/Components/Pages/Stock.razor` — 週期/還原切換按鈕在這
+2. `StockWeb.Data/StockRepository.cs` — 撈日 K 原始列（並呼叫下列 Services 做讀取端計算）
+3. `StockWeb.Services/AdjustedPriceService.cs` — 前復權（公式與 StockDCbot `analysis.adjust_history` 對齊）
+4. `StockWeb.Services/QuoteAggregator.cs` — 日 K → 週/月/年 K 聚合（先還原、再聚合）
+5. `StockWeb.Web/Components/Charts/LightweightChart.razor` ＋ `StockWeb.Web/wwwroot/js/charts.js` — C#→JS 的唯一邊界：C# 把序列化好的資料丟給 JS 畫圖，JS 不含任何商業邏輯
 
 ### 路線 C：自選股（唯一的寫入路徑）
-1. `Components/Pages/Watchlist.razor`
-2. `Data/WatchlistRepository.cs` — 注意這裡用 `CreateReadWrite()` 連線（其他 Repository 都是 `CreateReadOnly()`），這就是 AGENT.md 鐵律「唯一可寫 watchlist」在程式碼裡的樣子
-3. `Api/WatchlistEndpoints.cs` — GET/POST/DELETE
+1. `StockWeb.Web/Components/Pages/Watchlist.razor`
+2. `StockWeb.Data/WatchlistRepository.cs` — 注意這裡用 `CreateReadWrite()` 連線（其他 Repository 都是 `CreateReadOnly()`），這就是 AGENT.md 鐵律「唯一可寫 watchlist」在程式碼裡的樣子
+3. `StockWeb.Web/Api/WatchlistEndpoints.cs` — GET/POST/DELETE
 
 ---
 
@@ -89,12 +93,12 @@
 
 以加一個新查詢頁為例，永遠是同一套順序（由下而上）：
 
-1. `Models/` 加 DTO record
-2. `Data/` 加 `IXxxRepository` + 實作（SQL 在此）＋ `tests/XxxRepositoryTests`（用 `TestDatabase.cs` 的暫時 SQLite fixture）
-3. 需要計算邏輯 → `Services/` 加純類別＋測試
-4. `Api/` 加 `XxxEndpoints.cs`，在 `Program.cs` 註冊 DI 與 `MapXxxEndpoints()`
-5. `Components/Pages/` 加 `Xxx.razor`（`@page` 路由 + `@inject` + `@code`）
-6. `Components/Layout/MainLayout.razor` 加導覽連結
+1. `StockWeb.Models/` 加 DTO record
+2. `StockWeb.Data/` 加 `IXxxRepository` + 實作（SQL 在此）＋ `tests/XxxRepositoryTests`（用 `TestDatabase.cs` 的暫時 SQLite fixture）
+3. 需要計算邏輯 → `StockWeb.Services/` 加純類別＋測試
+4. `StockWeb.Web/Api/` 加 `XxxEndpoints.cs`，在 `Program.cs` 註冊 DI 與 `MapXxxEndpoints()`
+5. `StockWeb.Web/Components/Pages/` 加 `Xxx.razor`（`@page` 路由 + `@inject` + `@code`）
+6. `StockWeb.Web/Components/Layout/MainLayout.razor` 加導覽連結
 
 讀程式碼時反向走：**從 .razor 的 `@inject` 看它依賴誰，一路往下追到 SQL**。
 

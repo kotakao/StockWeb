@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>StockWeb</RootNamespace>
+    <AssemblyName>StockWeb</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\StockWeb.Data\StockWeb.Data.csproj" />
+    <ProjectReference Include="..\StockWeb.Services\StockWeb.Services.csproj" />
+    <ProjectReference Include="..\StockWeb.Models\StockWeb.Models.csproj" />
+  </ItemGroup>
+
+</Project>
