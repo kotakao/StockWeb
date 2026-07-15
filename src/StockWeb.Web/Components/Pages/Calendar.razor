@@ -5,8 +5,8 @@
 
 <PageTitle>除權息行事曆</PageTitle>
 
-<h1>除權息行事曆</h1>
-<p>月曆格線標示當月除權息事件，<span class="cal-event in-watch">自選股</span>以高亮顯示。</p>
+<h1>行事曆</h1>
+<p>月曆格線標示當月<span class="cal-event">除權息</span>與<span class="cal-event cal-conf">法說會</span>事件，<span class="cal-event in-watch">自選股</span>以高亮顯示。</p>
 
 <div class="cal-toolbar">
     <button @onclick="() => ShiftMonth(-1)">← 上個月</button>
@@ -35,21 +35,26 @@ else
         }
         @for (var day = 1; day <= DaysInMonth; day++)
         {
-            var events = _byDay[day];
             <div class="cal-cell">
                 <div class="cal-day">@day</div>
-                @foreach (var ev in events)
+                @foreach (var ev in _byDay![day])
                 {
                     <div class="cal-event @(ev.InWatchlist ? "in-watch" : "")" title="@Tooltip(ev)">
                         @ev.Code @ev.Name
                     </div>
                 }
+                @foreach (var c in _confByDay![day])
+                {
+                    <div class="cal-event cal-conf @(c.InWatchlist ? "in-watch" : "")" title="@ConfTooltip(c)">
+                        @c.Code @c.Name
+                    </div>
+                }
             </div>
         }
     </div>
-    @if (_events!.Count == 0)
+    @if (_events!.Count == 0 && _conferences!.Count == 0)
     {
-        <p class="card-reason">本月無除權息事件。</p>
+        <p class="card-reason">本月無除權息或法說會事件。</p>
     }
 }
 
@@ -59,6 +64,8 @@ else
     private DateOnly _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private List<DividendEvent>? _events;
     private ILookup<int, DividendEvent>? _byDay;
+    private List<Conference>? _conferences;
+    private ILookup<int, Conference>? _confByDay;
     private string? _error;
 
     private int DaysInMonth => DateTime.DaysInMonth(_month.Year, _month.Month);
@@ -81,7 +88,12 @@ else
             client.BaseAddress = new Uri(Nav.BaseUri);
             _events = await client.GetFromJsonAsync<List<DividendEvent>>(
                 $"api/calendar/dividends?month={_month:yyyy-MM}");
+            _conferences = await client.GetFromJsonAsync<List<Conference>>(
+                $"api/calendar/conferences?month={_month:yyyy-MM}");
             _byDay = (_events ?? new()).ToLookup(e => DateOnly.Parse(e.ExDate).Day);
+            _confByDay = (_conferences ?? new())
+                .Where(c => c.FactDate is not null)
+                .ToLookup(c => DateOnly.Parse(c.FactDate!).Day);
             _error = null;
         }
         catch (Exception ex)
@@ -99,6 +111,18 @@ else
             parts.Add($"現金 {cash:0.##}");
         if (ev.StockRatio is { } ratio and > 0)
             parts.Add($"配股 {ratio:0.####}");
+        return string.Join("｜", parts);
+    }
+
+    private static string ConfTooltip(Conference c)
+    {
+        var parts = new List<string> { $"{c.Code} {c.Name}".Trim(), "法說會" };
+        if (c.Detail.MeetingTime is { Length: > 0 } t)
+            parts.Add($"時間 {t}");
+        if (c.Detail.Location is { Length: > 0 } loc)
+            parts.Add($"地點 {loc}");
+        else if (c.Subject is { Length: > 0 } s)
+            parts.Add(s);
         return string.Join("｜", parts);
     }
 }

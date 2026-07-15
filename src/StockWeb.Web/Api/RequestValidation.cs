@@ -57,6 +57,22 @@ public static partial class RequestValidation
         return true;
     }
 
+    /// <summary>新聞語言參數：zh/en（大小寫不敏感，預設 zh），成功時帶出正規化後的小寫值。</summary>
+    public static bool TryValidateLang(string? lang, out string result, out string? error)
+    {
+        switch ((lang ?? "zh").Trim().ToLowerInvariant())
+        {
+            case "zh": result = "zh"; break;
+            case "en": result = "en"; break;
+            default:
+                result = "zh";
+                error = "lang 須為 zh 或 en。";
+                return false;
+        }
+        error = null;
+        return true;
+    }
+
     private static bool TryValidateRange(int value, int max, string name, out string? error)
     {
         if (value < 1 || value > max)

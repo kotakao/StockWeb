@@ -61,6 +61,12 @@ public sealed class TestDatabase : IDisposable
             name TEXT, revenue REAL, gross_profit REAL, operating_income REAL, net_income REAL, eps REAL,
             PRIMARY KEY (market, code, year_quarter)
         );
+        CREATE TABLE investor_conferences (
+            market TEXT NOT NULL DEFAULT 'TWSE', code TEXT NOT NULL,
+            announce_date TEXT NOT NULL, announce_time TEXT NOT NULL,
+            name TEXT, subject TEXT, matched_clause TEXT, fact_date TEXT, description TEXT, report_date TEXT,
+            PRIMARY KEY (market, code, announce_date, announce_time)
+        );
         """;
 
     public TestDatabase()

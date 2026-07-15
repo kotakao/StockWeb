@@ -186,6 +186,82 @@ else
             }
         </section>
     </div>
+
+    <h2 class="stock-section-title">近期資訊</h2>
+    <div class="stock-lower">
+        <section class="card">
+            <div class="news-head">
+                <h2>新聞</h2>
+                <div class="news-tabs">
+                    @foreach (var (value, label) in NewsLangs)
+                    {
+                        <button type="button" class="@(_newsLang == value ? "active" : null)"
+                                @onclick="() => SetNewsLangAsync(value)" disabled="@_newsBusy">@label</button>
+                    }
+                </div>
+            </div>
+            @if (_newsBusy && !_newsByLang.ContainsKey(_newsLang))
+            {
+                <p class="card-reason">載入新聞中…</p>
+            }
+            else if (CurrentNews is { } news)
+            {
+                @if (news.Error is not null)
+                {
+                    <p class="card-reason">無法載入新聞：@news.Error</p>
+                }
+                else if (news.Items.Count == 0)
+                {
+                    <p class="card-reason">查無相關新聞。</p>
+                }
+                else
+                {
+                    <ul class="news-list">
+                        @foreach (var item in news.Items)
+                        {
+                            <li>
+                                <a href="@item.Link" target="_blank" rel="noopener noreferrer">@item.Title</a>
+                                <div class="news-meta">@(item.Source ?? "來源不明")@(string.IsNullOrEmpty(item.PublishedDisplay) ? "" : $" · {item.PublishedDisplay}")</div>
+                            </li>
+                        }
+                    </ul>
+                    <p class="news-note">來源：Google News。僅顯示標題與連結，點擊於新分頁開啟原文。</p>
+                }
+            }
+        </section>
+
+        <section class="card">
+            <h2>法說會</h2>
+            @if (_conferences is null)
+            {
+                <p class="card-reason">載入中…</p>
+            }
+            else if (_conferences.Count == 0)
+            {
+                <p class="card-reason">尚無法說會資料（僅收錄重大訊息含「法人說明會」之公告，自部署起累積）。</p>
+            }
+            else
+            {
+                <ul class="conf-list">
+                    @foreach (var c in _conferences)
+                    {
+                        <li class="conf-item">
+                            <div class="conf-date">@(c.FactDate ?? "日期未定") 召開</div>
+                            <div class="conf-subject">@c.Subject</div>
+                            @if (ConferenceDetailText(c) is { } detail)
+                            {
+                                <div class="conf-detail">@detail</div>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(c.Description))
+                            {
+                                <div class="conf-detail conf-raw">@c.Description</div>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    </div>
 }
 
 @code {
@@ -198,6 +274,18 @@ else
     private IReadOnlyList<StockRevenueRow>? _revenue;
     private IReadOnlyList<StockFinancialRow>? _financials;
     private IReadOnlyList<DividendEvent>? _dividends;
+    private IReadOnlyList<Conference>? _conferences;
+
+    private readonly Dictionary<string, NewsResult> _newsByLang = new();
+    private string _newsLang = "zh";
+    private bool _newsBusy;
+
+    private static readonly (string Value, string Label)[] NewsLangs =
+    {
+        ("zh", "中文"), ("en", "英文"),
+    };
+
+    private NewsResult? CurrentNews => _newsByLang.TryGetValue(_newsLang, out var r) ? r : null;
 
     private bool _adjusted = true;
     private string _period = "daily";
@@ -250,6 +338,9 @@ else
         _loadError = null;
         _adjusted = true;
         _period = "daily";
+        _conferences = null;
+        _newsByLang.Clear();
+        _newsLang = "zh";
 
         try
         {
@@ -269,11 +360,46 @@ else
             _revenue = await SafeGet<List<StockRevenueRow>>(client, $"api/stocks/{Code}/revenue?months=24");
             _financials = await SafeGet<List<StockFinancialRow>>(client, $"api/stocks/{Code}/financials?quarters=20");
             _dividends = await SafeGet<List<DividendEvent>>(client, $"api/stocks/{Code}/dividends");
+            _conferences = await SafeGet<List<Conference>>(client, $"api/stocks/{Code}/conferences") ?? new List<Conference>();
+
+            await LoadNewsAsync(_newsLang);
         }
         catch (Exception ex)
         {
             _loadError = ex.Message;
         }
+    }
+
+    // 新聞逐語言延後載入（外部抓取較慢，切頁籤才抓，抓過即快取於元件內）。
+    private async Task LoadNewsAsync(string lang)
+    {
+        if (_newsByLang.ContainsKey(lang))
+            return;
+        _newsBusy = true;
+        var result = await SafeGet<NewsResult>(Client(), $"api/stocks/{Code}/news?lang={lang}");
+        _newsByLang[lang] = result ?? new NewsResult(Array.Empty<NewsItem>(), "無法載入新聞。");
+        _newsBusy = false;
+    }
+
+    private async Task SetNewsLangAsync(string lang)
+    {
+        if (_newsLang == lang)
+            return;
+        _newsLang = lang;
+        await LoadNewsAsync(lang);
+    }
+
+    // 法說會「說明」解析：有召開時間／地點／擇要任一即組合顯示；全無則回 null（UI 退回原文）。
+    private static string? ConferenceDetailText(Conference c)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(c.Detail.MeetingTime))
+            parts.Add($"時間 {c.Detail.MeetingTime}");
+        if (!string.IsNullOrWhiteSpace(c.Detail.Location))
+            parts.Add($"地點 {c.Detail.Location}");
+        if (!string.IsNullOrWhiteSpace(c.Detail.Summary))
+            parts.Add(c.Detail.Summary!);
+        return parts.Count > 0 ? string.Join("｜", parts) : null;
     }
 
     private string QuotesUrl()

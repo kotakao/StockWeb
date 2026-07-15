@@ -182,6 +182,13 @@ public sealed class StockRepository : IStockRepository
             .ToList();
     }
 
+    public async Task<string?> GetNameAsync(string code)
+    {
+        using var connection = _connectionFactory.CreateReadOnly();
+        return await connection.ExecuteScalarAsync<string?>(
+            "SELECT name FROM daily_quotes WHERE code = @code ORDER BY date DESC LIMIT 1", new { code });
+    }
+
     // date DESC LIMIT 取最新 N 筆後反轉為由舊到新，供圖表時間軸使用。
     private async Task<IReadOnlyList<T>> QueryAscendingAsync<T>(string sql, string code, int limit)
     {

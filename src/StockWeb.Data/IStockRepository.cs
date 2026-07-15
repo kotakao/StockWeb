@@ -24,4 +24,7 @@ public interface IStockRepository
 
     /// <summary>近 quarters 季損益（含讀取端計算的毛利率／營益率）。表不存在時回空集合。</summary>
     Task<IReadOnlyList<StockFinancialRow>> GetFinancialsAsync(string code, int quarters);
+
+    /// <summary>取該代號最新日的公司名稱（供新聞查詢組字）；查無代號時回 null。</summary>
+    Task<string?> GetNameAsync(string code);
 }

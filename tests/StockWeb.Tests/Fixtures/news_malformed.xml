@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>畸形項目測試</title>
+  <item>
+    <title>缺連結的項目（應略過）</title>
+    <pubDate>Wed, 15 Jul 2026 01:22:33 GMT</pubDate>
+    <source url="https://example.com">某媒體</source>
+  </item>
+  <item>
+    <link>https://news.google.com/rss/articles/only-link</link>
+    <pubDate>Wed, 15 Jul 2026 01:22:33 GMT</pubDate>
+  </item>
+  <item>
+    <title>日期畸形且無來源的項目（應保留、來源為 null、時間顯示退回原字串）</title>
+    <link>https://news.google.com/rss/articles/bad-date</link>
+    <pubDate>不是日期</pubDate>
+  </item>
+  <item>
+    <title>正常項目</title>
+    <link>https://news.google.com/rss/articles/ok</link>
+    <pubDate>Tue, 14 Jul 2026 04:57:12 GMT</pubDate>
+    <source url="https://good.example.com">好媒體</source>
+  </item>
+</channel></rss>

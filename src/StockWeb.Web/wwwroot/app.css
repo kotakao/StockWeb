@@ -399,6 +399,112 @@ h1:focus {
     opacity: 0.6;
 }
 
+/* 近期資訊：新聞與法說會 */
+.news-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+.news-head h2 {
+    margin: 0;
+}
+
+.news-tabs {
+    display: inline-flex;
+    border: 1px solid #cfd8dc;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.news-tabs button {
+    border: none;
+    background: #fff;
+    padding: 0.2rem 0.7rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-left: 1px solid #eceff1;
+}
+
+.news-tabs button:first-child {
+    border-left: none;
+}
+
+.news-tabs button.active {
+    background: #1565c0;
+    color: #fff;
+}
+
+.news-tabs button:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.news-list,
+.conf-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.news-list li {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.news-list a {
+    color: #1565c0;
+    text-decoration: none;
+    line-height: 1.4;
+}
+
+.news-list a:hover {
+    text-decoration: underline;
+}
+
+.news-meta {
+    font-size: 0.75rem;
+    color: #90a4ae;
+    margin-top: 0.1rem;
+}
+
+.news-note {
+    margin: 0.5rem 0 0;
+    font-size: 0.72rem;
+    color: #b0bec5;
+}
+
+.conf-item {
+    padding: 0.45rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.conf-date {
+    font-size: 0.8rem;
+    color: #607d8b;
+    font-weight: 600;
+}
+
+.conf-subject {
+    line-height: 1.4;
+}
+
+.conf-detail {
+    font-size: 0.8rem;
+    color: #78909c;
+    margin-top: 0.1rem;
+}
+
+.conf-detail.conf-raw {
+    white-space: pre-line;
+}
+
+.cal-event.cal-conf:not(.in-watch) {
+    background: #c8e6c9;
+}
+
 .stock-section-title {
     margin: 1.5rem 0 0;
     font-size: 1.1rem;
