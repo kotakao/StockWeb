@@ -56,6 +56,11 @@ public sealed class TestDatabase : IDisposable
             user_id TEXT NOT NULL, code TEXT NOT NULL,
             PRIMARY KEY (user_id, code)
         );
+        CREATE TABLE holdings (
+            user_id TEXT NOT NULL, code TEXT NOT NULL,
+            shares REAL, avg_cost REAL, updated_at TEXT,
+            PRIMARY KEY (user_id, code)
+        );
         CREATE TABLE quarterly_financials (
             market TEXT NOT NULL DEFAULT 'TWSE', code TEXT NOT NULL, year_quarter TEXT NOT NULL,
             name TEXT, revenue REAL, gross_profit REAL, operating_income REAL, net_income REAL, eps REAL,

@@ -197,6 +197,32 @@ h1:focus {
     text-align: left;
 }
 
+/* 觀察名單狀態板 */
+.status-scroll {
+    overflow-x: auto;
+}
+
+.status-table {
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.status-table tfoot .summary-row td {
+    border-top: 2px solid #ccc;
+    font-weight: 600;
+}
+
+.holding-edit {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.holding-edit input {
+    width: 5rem;
+    padding: 0.2rem;
+}
+
 /* 除權息行事曆 */
 .cal-toolbar {
     display: flex;

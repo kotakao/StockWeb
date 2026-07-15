@@ -12,6 +12,10 @@ public static class WatchlistEndpoints
         app.MapGet("/api/watchlist", async (IWatchlistRepository repository) =>
             Results.Ok(await repository.GetAsync()));
 
+        // GET /api/watchlist/status — 狀態板：一次組合行情/持股損益/狀態訊號與聚合列（避免 N+1）。
+        app.MapGet("/api/watchlist/status", async (IWatchlistStatusRepository repository) =>
+            Results.Ok(await repository.GetStatusAsync()));
+
         // POST /api/watchlist — 加入代號（JSON body，無表單，關閉 antiforgery）。
         app.MapPost("/api/watchlist", async (WatchlistRequest request, IWatchlistRepository repository) =>
         {

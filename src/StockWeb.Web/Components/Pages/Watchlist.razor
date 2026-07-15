@@ -3,10 +3,11 @@
 @inject IHttpClientFactory HttpClientFactory
 @inject NavigationManager Nav
 
-<PageTitle>自選股</PageTitle>
+<PageTitle>觀察名單狀態板</PageTitle>
 
-<h1>自選股</h1>
-<p>與 Bot /watch 共用清單，上限 20 檔。顯示最新收盤、漲跌%、近 5 日三大法人淨額（張）與融資餘額變化。</p>
+<h1>觀察名單狀態板</h1>
+<p>與 Bot /watch 共用清單，上限 20 檔。可為每檔填寫持股（股數、平均成本）以檢視損益；未填視為純觀察。
+   損益紅漲綠跌（台股慣例），預設按當日損益排序。</p>
 
 <div class="watchlist-add">
     <input placeholder="輸入股票代號（如 2330）" @bind="_newCode" @bind:event="oninput"
@@ -20,58 +21,147 @@
 
 @if (_error is not null)
 {
-    <p class="error">無法載入自選股：@_error</p>
+    <p class="error">無法載入觀察名單：@_error</p>
 }
-else if (_rows is null)
+else if (_status is null)
 {
     <p class="card-reason">載入中…</p>
 }
-else if (_rows.Count == 0)
+else if (_status.Rows.Count == 0)
 {
     <p class="card-reason">尚無自選股，於上方輸入代號加入。</p>
 }
 else
 {
-    <table class="watchlist-table">
+    <div class="status-scroll">
+    <table class="watchlist-table status-table">
         <thead>
             <tr>
                 <th>代號</th>
                 <th>名稱</th>
                 <th>收盤</th>
                 <th>漲跌%</th>
-                <th>近5日法人淨額(張)</th>
-                <th>融資餘額變化</th>
+                <th>股數</th>
+                <th>平均成本</th>
+                <th>現值</th>
+                <th>未實現損益</th>
+                <th>報酬率</th>
+                <th>當日損益</th>
+                <th>法人5日</th>
+                <th>融資5日</th>
+                <th>52週</th>
+                <th>事件</th>
+                <th>持股</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var row in _rows)
+            @foreach (var row in _status.Rows)
             {
                 <tr>
                     <td><a href="stock/@row.Code">@row.Code</a></td>
                     <td>@row.Name</td>
                     <td>@Fmt(row.Close)</td>
-                    <td class="@SignClass(row.ChangePct)">@Fmt(row.ChangePct)</td>
-                    <td class="@SignClass(row.InstitutionalNet5)">@Lots(row.InstitutionalNet5)</td>
-                    <td class="@SignClass(row.MarginChange)">@FmtInt(row.MarginChange)</td>
+                    <td class="@SignClass(row.ChangePct)">@Pct(row.ChangePct)</td>
+                    <td>@Lots(row.Shares)</td>
+                    <td>@Fmt(row.AvgCost)</td>
+                    <td>@Money(row.MarketValue)</td>
+                    <td class="@SignClass(row.UnrealizedPnl)">@Money(row.UnrealizedPnl)</td>
+                    <td class="@SignClass(row.ReturnRate)">@Pct(row.ReturnRate)</td>
+                    <td class="@SignClass(row.DayPnl)">@Money(row.DayPnl)</td>
+                    <td class="@TrendClass(row.InstitutionalTrend)">@InstText(row.InstitutionalTrend)</td>
+                    <td class="@TrendClass(row.MarginTrend)">@MarginText(row.MarginTrend)</td>
+                    <td class="@RangeClass(row.RangePosition)">@RangeText(row.RangePosition)</td>
+                    <td>@EventBadges(row)</td>
+                    <td>
+                        @if (_editingCode == row.Code)
+                        {
+                            <span class="holding-edit">
+                                <input type="number" step="any" min="0" placeholder="股數" @bind="_editShares" />
+                                <input type="number" step="any" min="0" placeholder="均價" @bind="_editAvgCost" />
+                                <button class="link-btn" @onclick="() => SaveHoldingAsync(row.Code)" disabled="@_busy">儲存</button>
+                                <button class="link-btn" @onclick="CancelEdit" disabled="@_busy">取消</button>
+                            </span>
+                        }
+                        else
+                        {
+                            <button class="link-btn" @onclick="() => StartEdit(row)" disabled="@_busy">編輯</button>
+                            @if (row.Shares is not null)
+                            {
+                                <button class="link-btn" @onclick="() => ClearHoldingAsync(row.Code)" disabled="@_busy">清除</button>
+                            }
+                        }
+                    </td>
                     <td><button class="link-btn" @onclick="() => RemoveAsync(row.Code)" disabled="@_busy">移除</button></td>
                 </tr>
             }
         </tbody>
+        <tfoot>
+            <tr class="summary-row">
+                <td colspan="6">組合合計</td>
+                <td>@Money(_status.Summary.TotalMarketValue)</td>
+                <td class="@SignClass(_status.Summary.TotalUnrealizedPnl)">@Money(_status.Summary.TotalUnrealizedPnl)</td>
+                <td></td>
+                <td class="@SignClass(_status.Summary.TotalDayPnl)">@Money(_status.Summary.TotalDayPnl)</td>
+                <td colspan="6"></td>
+            </tr>
+        </tfoot>
     </table>
+    </div>
+    @if (_holdingMessage is not null)
+    {
+        <p class="watchlist-msg">@_holdingMessage</p>
+    }
 }
 
 @code {
-    private IReadOnlyList<WatchlistRow>? _rows;
+    private WatchlistStatusResponse? _status;
     private string? _error;
     private string _newCode = "";
     private string? _addMessage;
+    private string? _holdingMessage;
     private bool _busy;
 
+    // 持股編輯狀態
+    private string? _editingCode;
+    private string _editShares = "";
+    private string _editAvgCost = "";
+
     private static string Fmt(double? v) => v is { } x ? x.ToString("0.##") : "—";
-    private static string FmtInt(double? v) => v is { } x ? x.ToString("#,##0") : "—";
-    private static string Lots(double? shares) => shares is { } s ? (s / 1000).ToString("#,##0") : "—";
+    private static string Money(double? v) => v is { } x ? x.ToString("#,##0") : "—";
+    private static string Pct(double? v) => v is { } x ? x.ToString("0.##") + "%" : "—";
+    private static string Lots(double? shares) => shares is { } s ? (s / 1000).ToString("#,##0.##") : "—";
     private static string SignClass(double? v) => v is { } x && x != 0 ? (x > 0 ? "up" : "down") : "";
+
+    private static string TrendClass(SignalTrend t) => t switch
+    {
+        SignalTrend.Up => "up",
+        SignalTrend.Down => "down",
+        _ => "",
+    };
+    private static string InstText(SignalTrend t) => t switch
+    {
+        SignalTrend.Up => "買超", SignalTrend.Down => "賣超", SignalTrend.Flat => "持平", _ => "—",
+    };
+    private static string MarginText(SignalTrend t) => t switch
+    {
+        SignalTrend.Up => "增", SignalTrend.Down => "減", SignalTrend.Flat => "持平", _ => "—",
+    };
+    private static string RangeClass(RangeSignal r) => r switch
+    {
+        RangeSignal.NearHigh => "up", RangeSignal.NearLow => "down", _ => "",
+    };
+    private static string RangeText(RangeSignal r) => r switch
+    {
+        RangeSignal.NearHigh => "近高", RangeSignal.NearLow => "近低", _ => "—",
+    };
+    private static string EventBadges(WatchlistStatusRow row)
+    {
+        var parts = new List<string>();
+        if (row.HasDividendSoon) parts.Add("息");
+        if (row.HasConferenceSoon) parts.Add("會");
+        return parts.Count > 0 ? string.Join(" ", parts) : "—";
+    }
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -86,7 +176,7 @@ else
     {
         try
         {
-            _rows = await Client().GetFromJsonAsync<List<WatchlistRow>>("api/watchlist");
+            _status = await Client().GetFromJsonAsync<WatchlistStatusResponse>("api/watchlist/status");
             _error = null;
         }
         catch (Exception ex)
@@ -144,6 +234,75 @@ else
         catch (Exception ex)
         {
             _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void StartEdit(WatchlistStatusRow row)
+    {
+        _editingCode = row.Code;
+        _editShares = row.Shares?.ToString("0.##") ?? "";
+        _editAvgCost = row.AvgCost?.ToString("0.##") ?? "";
+        _holdingMessage = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editingCode = null;
+        _holdingMessage = null;
+    }
+
+    private async Task SaveHoldingAsync(string code)
+    {
+        if (!double.TryParse(_editShares, out var shares) || shares < 0 ||
+            !double.TryParse(_editAvgCost, out var avgCost) || avgCost < 0)
+        {
+            _holdingMessage = "股數與平均成本須為 0 或正數。";
+            return;
+        }
+
+        _busy = true;
+        _holdingMessage = null;
+        try
+        {
+            var response = await Client().PutAsJsonAsync("api/holdings",
+                new HoldingRequest { Code = code, Shares = shares, AvgCost = avgCost });
+            if (response.IsSuccessStatusCode)
+            {
+                _editingCode = null;
+                await LoadAsync();
+            }
+            else
+            {
+                var apiError = await response.Content.ReadFromJsonAsync<ApiError>();
+                _holdingMessage = apiError?.Error ?? $"HTTP {(int)response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _holdingMessage = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ClearHoldingAsync(string code)
+    {
+        _busy = true;
+        _holdingMessage = null;
+        try
+        {
+            await Client().DeleteAsync($"api/holdings/{code}");
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _holdingMessage = ex.Message;
         }
         finally
         {

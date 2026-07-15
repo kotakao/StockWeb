@@ -81,7 +81,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ## 鐵律（與 StockDCBot 的資料庫共用契約，違反即為錯誤）
 
 1. **Schema 由 Python 端（StockDCbot/storage.py）獨占管理**。本專案嚴禁對共用資料庫 CREATE/ALTER/DROP 任何資料表；需要新表或新欄位時，回到 StockDCBot 開派工。（測試 fixture 中建表僅限測試用暫時檔，不在此限。）
-2. 對 market 資料表（daily_quotes/institutional/margin/valuation/market_daily/dividend_events/monthly_revenue 等）**一律唯讀**；可寫入的表僅限 todolist 派工中明確列入白名單者（目前：`watchlist`，網頁端 user_id 固定用 `0`，上限 20 檔與 Bot 一致）。
+2. 對 market 資料表（daily_quotes/institutional/margin/valuation/market_daily/dividend_events/monthly_revenue 等）**一律唯讀**；可寫入的表僅限 todolist 派工中明確列入白名單者（目前：`watchlist` 與 `holdings`，網頁端 user_id 固定用 `0`；`watchlist` 上限 20 檔與 Bot 一致，`holdings` 以 user_id+code 為鍵 upsert 持股）。
 3. 資料庫絕對路徑在 `appsettings.json` 的 `DbPath`；嚴禁提交任何含機密的設定或 `.env` 類檔案。
 4. 兩專案依賴 SQLite **WAL 模式**（由 Bot 端負責開啟）。
 
